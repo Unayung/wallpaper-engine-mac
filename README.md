@@ -60,11 +60,7 @@ The import panel now correctly handles both individual wallpaper folders and par
 | Scene (DXT textures) | Preview fallback |
 | Application | Not supported |
 
-## Installation
-
-Download the `.dmg` from Releases, or build from source (see below).
-
-## Build
+## Build from Source
 
 ### Prerequisites
 - macOS >= 13.0
