@@ -19,12 +19,31 @@ struct WebWallpaperView: NSViewRepresentable {
     }
     
     func makeNSView(context: Context) -> WKWebView {
-        let nsView = WKWebView(frame: .zero)
-        
+        let configuration = WKWebViewConfiguration()
+        Self.enableFileAccess(on: configuration)
+
+        let nsView = WKWebView(frame: .zero, configuration: configuration)
         nsView.navigationDelegate = viewModel
-        
         nsView.loadFileURL(viewModel.fileUrl, allowingReadAccessTo: viewModel.readAccessURL)
         return nsView
+    }
+
+    /// Enable file:// cross-origin access for WebGL wallpapers.
+    /// Tries multiple private WebKit key variants, catching ObjC exceptions for each.
+    private static func enableFileAccess(on configuration: WKWebViewConfiguration) {
+        let prefs = configuration.preferences
+
+        // Key variants across macOS versions
+        let fileAccessKeys = ["allowFileAccessFromFileURLs", "_allowFileAccessFromFileURLs"]
+        let universalAccessKeys = ["allowUniversalAccessFromFileURLs", "_allowUniversalAccessFromFileURLs"]
+
+        for key in fileAccessKeys {
+            if ObjCExceptionCatcher.performSafe({ prefs.setValue(true, forKey: key) }) { break }
+        }
+
+        for key in universalAccessKeys {
+            if ObjCExceptionCatcher.performSafe({ prefs.setValue(true, forKey: key) }) { break }
+        }
     }
     
     func updateNSView(_ nsView: WKWebView, context: Context) {

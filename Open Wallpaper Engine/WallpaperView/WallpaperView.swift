@@ -15,8 +15,8 @@ struct WallpaperView: View {
         switch viewModel.currentWallpaper.project.type.lowercased() {
         case "video":
             VideoWallpaperView(wallpaperViewModel: viewModel)
-//        case "scene":
-//            Text("?")
+        case "scene":
+            SceneWallpaperView(wallpaperViewModel: viewModel)
         case "web":
             WebWallpaperView(wallpaperViewModel: viewModel)
         default:

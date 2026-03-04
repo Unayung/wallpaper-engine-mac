@@ -1,111 +1,104 @@
-Wallpaper Engine
+Open Wallpaper Engine (Patched)
 =========
 
-![GitHub release (latest by date)](https://img.shields.io/github/v/release/MrWindDog/wallpaper-engine-mac)
+[![GitHub license](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-An open source wallpaper engine for macOS (which is not relative to the existing one on Steam)
+A patched fork of [Open Wallpaper Engine](https://github.com/MrWindDog/wallpaper-engine-mac) for macOS, adding scene wallpaper rendering and web wallpaper fixes.
 
-<p align="center">
-<a href="https://example.com">Documentation (TODO)</a>
-·
-<a href="https://github.com/MrWindDog/wallpaper-engine-mac/blob/main/AUTHORS.md">Authors</a>
-</p>
+> **Note:** This is NOT affiliated with the commercial Wallpaper Engine on Steam. This is an open-source macOS app that can display wallpaper assets from Wallpaper Engine's Steam Workshop.
 
-Menu
-=================
+## Credits
 
-<!--ts-->
-- [Open Wallpaper Engine](#open-wallpaper-engine)
-- [Menu](#menu)
-  - [Presentation](#presentation)
-    - [Wallpaper](#wallpaper)
-    - [UI](#ui)
-  - [Installation](#installation)
-  - [Usage](#usage)
-    - [Import from Wallpaper Engine (on Steam)](#import-from-wallpaper-engine-on-steam)
-      - [Notice](#notice)
-  - [Build](#build)
-    - [Prerequisite](#prerequisite)
-  - [Documentation](#documentation)
-<!--te-->
+This project is built on top of the work of:
 
-## Presentation
+- **[MrWindDog](https://github.com/MrWindDog)** — Maintainer of the upstream [wallpaper-engine-mac](https://github.com/MrWindDog/wallpaper-engine-mac) fork, added new features and UI refinements
+- **[Haren Chen](https://github.com/haren724)** — Original creator of [open-wallpaper-engine-mac](https://github.com/haren724/open-wallpaper-engine-mac), built the core app architecture (SwiftUI, video wallpaper playback, import system, playlist UI)
+- **[1ris_W](https://github.com/Erica-Iris)** — Chinese i18n translation
+- **[Klaus Zhu](https://github.com/klauszhu1105)** — App logo icons
 
-### Wallpaper
+Licensed under [GPL-3.0](LICENSE), same as the original project.
 
-![](resources/wallpaper.png)
+## What's Patched
 
-### UI
+### Web Wallpapers — Fixed gray/blank rendering
+WebGL-based wallpapers rendered as gray rectangles because `WKWebView` blocked local file access for textures and assets.
 
-![](resources/wallpaper-with-windows.png)
+**Fix:** Enabled `allowFileAccessFromFileURLs` and `allowUniversalAccessFromFileURLs` on the WKWebView configuration, allowing WebGL shaders to load local texture files.
 
+### Scene Wallpapers — Implemented from scratch
+Scene wallpapers (the most common type on Steam Workshop) were completely unimplemented — just showed "Hello, World!".
+
+**New implementation includes:**
+- **PKG parser** — Reads Wallpaper Engine's PKGV archive format to extract scene.json, models, materials, and textures
+- **TEX parser** — Reads TEXV0005 texture containers, extracts embedded JPEG/PNG image data from TEXI/TEXB sections
+- **Scene JSON decoder** — Parses scene.json with flexible decoding that handles Wallpaper Engine's polymorphic fields (values can be plain types or `{"script":..,"value":..}` objects)
+- **SpriteKit renderer** — Renders scene image layers as SKSpriteNodes with correct positioning, sizing, alpha, color tinting, and blend modes
+- **Preview fallback** — Falls back to preview.jpg/png/gif when textures can't be extracted
+- **TEXI format detection** — Quickly identifies and skips DXT-compressed textures that can't be decoded
+
+### Import — Fixed folder import
+The import panel now correctly handles both individual wallpaper folders and parent directories containing multiple wallpapers.
+
+## Current Limitations
+
+- **DXT textures** — Wallpapers using DXT1/DXT5 compressed textures (TEXI format 4/7/8) cannot be rendered. These are GPU-native compressed formats that require either a software decompressor or Metal-based rendering. The app falls back to the preview image for these wallpapers.
+- **Particle effects** — Scene particle systems (rain, snow, sparkles) are parsed but disabled in rendering to avoid visual artifacts. The particle mapping code exists but needs refinement.
+- **Audio-reactive scripts** — Wallpaper Engine's JavaScript-based audio visualization scripts are not executed. Properties with scripts fall back to their static `value`.
+- **Shader effects** — Custom GLSL shaders (bloom, blur, color correction) are not applied.
+- **Camera parallax** — Mouse-tracking camera movement is not implemented.
+- **Animated scenes** — Sprite animations and timeline-based object animations are not supported.
+- **Some JPEG thumbnails** — A small number of TEXB format 1 files contain non-standard JPEG data that macOS cannot decode. These are typically DXT-compressed textures misidentified as format 1.
+
+## Supported Wallpaper Types
+
+| Type | Status |
+|------|--------|
+| Video (.mp4, .webm) | Working (original) |
+| Web (HTML/WebGL) | Working (patched) |
+| Scene (static images) | Working (new) |
+| Scene (particles) | Partial (disabled) |
+| Scene (DXT textures) | Preview fallback |
+| Application | Not supported |
 
 ## Installation
-Download the .dmg file to local and drag the `.app` application file under `/Applications` folder
 
-## Usage
-Hey!
-This is a revamp of "Open Wallpaper Engine" by Haren Chen,
-from adding new features to refining existing ones, this new
-project serves as a continuation to his original concept.
-
-## Usage (Original from Haren Chen)
-Hi there!
-I hosted a chat group on QQ: `228230228`  
-Guys If you are interested in contributing to this project, please 
-join this chat so that we could communicate much easier.
-
-大家好呀！ 
-我在QQ上建了个群：`228230228` 
-如果您有兴趣为这个项目做出贡献，不介意的话加一下呗，以便我们可以更方便地沟通。
-
-
-
-### Import from Wallpaper Engine (on Steam)
-
-Check the File Menu
-
-![](resources/import-menu.png)
-
-Then select **Folder** of your wallpaper to be imported
-
-![](resources/import-panel.png)
-
-A normal wallpaper folder should like this (video wallpaper):
-- wallpaper_folder_name
-  - wallpaper_video_name.mp4
-  - project.json
-  - preview.gif
-
-#### Notice
-So far, only format from Wallpaper Engine is supported. That means you can't directly drag a `.mp4` file in and let it animate your desktop screen. We'll fix that soon.
-
+Download the `.dmg` from Releases, or build from source (see below).
 
 ## Build
-If you would like to make contribute to this project or for some other purposes, then you probably should at least build once. Here're the steps:
 
-### Prerequisite
+### Prerequisites
 - macOS >= 13.0
 - Xcode >= 14.4
-- Xcode Commandline Tools
+- Xcode Command Line Tools
 
------
-First, fork and clone your forked repo or just clone this repo directly if you don't plan to be a contributor. If you're in China, you'd better set up a HTTPS Proxy first to avoid failure due to bad connection or poor download speed.
+### Steps
 ```sh
-git clone https://github.com/MrWindDog/wallpaper-engine-mac
+git clone https://github.com/unayung/wallpaper-engine-mac
+cd wallpaper-engine-mac
+open "Open Wallpaper Engine.xcodeproj"
 ```
 
-And then open the directory in Xcode.
-```sh
-open open-wallpaper-engine-mac -a /Applications/Xcode.app
-```
+In Xcode, change the signing certificate to your own or select "Sign to Run Locally", then press `Cmd + R` to build and run.
 
-Change Signine Certificate to your own or select 'Sign to Run Locally'
+## Usage
 
-![](resources/change-signing-certificate.png)
+### Import from Wallpaper Engine (Steam)
 
-Then press `command ⌘ + R` to build and run
+1. Open the app's File menu
+2. Select "Import from Folder"
+3. Choose your Wallpaper Engine workshop folder (typically `~/.steam/steam/steamapps/workshop/content/431960/`) or select individual wallpaper folders
+4. Each wallpaper folder should contain a `project.json` file
 
+## Files Changed (vs upstream)
 
-## Documentation
-This project's documentation can be build with `docc`. I'll upload the documentation link automatically built by github action here later.
+**Modified:**
+- `WebWallpaperView.swift` — WKWebView file access configuration
+- `WallpaperView.swift` — Scene wallpaper dispatch
+- `SceneWallpaperView.swift` — Rewritten as SpriteKit NSViewRepresentable
+- `ImportPanels.swift` — Folder import logic fix
+
+**Added:**
+- `Services/SceneParsers/PKGParser.swift` — PKGV archive parser
+- `Services/SceneParsers/TEXParser.swift` — TEXV texture parser
+- `Services/SceneParsers/SceneModels.swift` — Scene JSON data models
+- `Services/SceneWallpaperViewModel.swift` — Scene loading and SpriteKit rendering

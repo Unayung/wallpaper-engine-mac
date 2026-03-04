@@ -34,33 +34,51 @@ extension AppDelegate {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
+        panel.allowsMultipleSelection = true
         panel.beginSheetModal(for: self.mainWindowController.window) { [weak self] response in
             if response != .OK { return }
-            guard let url = panel.urls.first else { return }
-            
-            guard let wallpaperFolder = try? FileWrapper(url: url)
-            else {
-                DispatchQueue.main.async {
-                    self?.contentViewModel.alertImportModal(which: .permissionDenied)
+            guard !panel.urls.isEmpty else { return }
+
+            let fm = FileManager.default
+            let docsDir = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+
+            // Collect wallpaper folders: each selected URL is either a wallpaper
+            // itself (contains project.json) or a parent containing wallpaper subfolders.
+            var wallpaperURLs: [URL] = []
+            for url in panel.urls {
+                if fm.fileExists(atPath: url.appending(path: "project.json").path) {
+                    wallpaperURLs.append(url)
+                } else {
+                    // Scan immediate children for wallpaper folders
+                    guard let children = try? fm.contentsOfDirectory(
+                        at: url, includingPropertiesForKeys: [.isDirectoryKey],
+                        options: .skipsHiddenFiles
+                    ) else { continue }
+                    for child in children {
+                        var isDir: ObjCBool = false
+                        if fm.fileExists(atPath: child.path, isDirectory: &isDir),
+                           isDir.boolValue,
+                           fm.fileExists(atPath: child.appending(path: "project.json").path) {
+                            wallpaperURLs.append(child)
+                        }
+                    }
                 }
-                return
             }
-            
-            guard wallpaperFolder.fileWrappers?["project.json"] != nil
-            else {
+
+            guard !wallpaperURLs.isEmpty else {
                 DispatchQueue.main.async {
                     self?.contentViewModel.alertImportModal(which: .doesNotContainWallpaper)
                 }
                 return
             }
-            
+
             DispatchQueue.main.async {
-                try? FileManager.default.copyItem(
-                    at: url,
-                    to: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                        .appending(path: url.lastPathComponent)
-                )
+                for url in wallpaperURLs {
+                    let dest = docsDir.appending(path: url.lastPathComponent)
+                    if !fm.fileExists(atPath: dest.path) {
+                        try? fm.copyItem(at: url, to: dest)
+                    }
+                }
             }
         }
     }
