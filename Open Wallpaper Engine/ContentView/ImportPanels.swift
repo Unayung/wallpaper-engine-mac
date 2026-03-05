@@ -40,7 +40,7 @@ extension AppDelegate {
             guard !panel.urls.isEmpty else { return }
 
             let fm = FileManager.default
-            let docsDir = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let docsDir = fm.wallpapersDirectory
 
             // Collect wallpaper folders: each selected URL is either a wallpaper
             // itself (contains project.json) or a parent containing wallpaper subfolders.

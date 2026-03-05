@@ -47,7 +47,10 @@ class ContentViewModel: ObservableObject, DropDelegate {
     @Published var hoveredWallpaper: WEWallpaper?
     
     @Published var isUnsubscribeConfirming = false
-    
+
+    @Published var selectedWallpapers = Set<URL>()
+    @Published var isBatchUnsubscribeConfirming = false
+
     @Published var searchText = ""
     
     @AppStorage("WallpapersPerPage") var wallpapersPerPage: Int = 50
@@ -74,7 +77,7 @@ class ContentViewModel: ObservableObject, DropDelegate {
     
     private var urls: [URL] {
         guard let contents = try? FileManager.default.contentsOfDirectory(
-            at: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0],
+            at: FileManager.default.wallpapersDirectory,
             includingPropertiesForKeys: nil,
             options: .skipsHiddenFiles
         ) else {
@@ -291,6 +294,27 @@ class ContentViewModel: ObservableObject, DropDelegate {
         Int(self.filteredWallpapers.count / self.wallpapersPerPage)
     }
     
+    func toggleSelection(for wallpaper: WEWallpaper) {
+        let url = wallpaper.wallpaperDirectory
+        if selectedWallpapers.contains(url) {
+            selectedWallpapers.remove(url)
+        } else {
+            selectedWallpapers.insert(url)
+        }
+    }
+
+    func clearSelection() {
+        selectedWallpapers.removeAll()
+    }
+
+    func isSelected(_ wallpaper: WEWallpaper) -> Bool {
+        selectedWallpapers.contains(wallpaper.wallpaperDirectory)
+    }
+
+    func selectedWallpaperItems() -> [WEWallpaper] {
+        autoRefreshWallpapers.filter { selectedWallpapers.contains($0.wallpaperDirectory) }
+    }
+
     func toggleFilter() {
         isFilterReveal.toggle()
     }
@@ -338,7 +362,7 @@ class ContentViewModel: ObservableObject, DropDelegate {
                 DispatchQueue.main.async {
                     try? FileManager.default.copyItem(
                         at: url,
-                        to: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                        to: FileManager.default.wallpapersDirectory
                             .appending(path: url.lastPathComponent)
                     )
                 }
@@ -370,7 +394,7 @@ class ContentViewModel: ObservableObject, DropDelegate {
                             DispatchQueue.main.async {
                                 do {
                                     try wallpaperDirectoryWrapper.write(
-                                        to: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appending(path: String(filename.prefix(filename.count - 4))),
+                                        to: FileManager.default.wallpapersDirectory.appending(path: String(filename.prefix(filename.count - 4))),
                                         originalContentsURL: nil)
                                 } catch {
                                     print(error)

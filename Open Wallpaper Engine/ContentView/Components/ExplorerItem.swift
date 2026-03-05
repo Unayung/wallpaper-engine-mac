@@ -50,10 +50,25 @@ struct ExplorerItem: SubviewOfContentView {
 //                }
         }
         .selected(wallpaper.wallpaperDirectory == wallpaperViewModel.currentWallpaper.wallpaperDirectory)
+        .overlay(
+            RoundedRectangle(cornerRadius: 2)
+                .stroke(Color.blue, lineWidth: viewModel.isSelected(wallpaper) ? 3 : 0)
+        )
+        .overlay(alignment: .topLeading) {
+            if viewModel.isSelected(wallpaper) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.white, .blue)
+                    .padding(4)
+            }
+        }
         .border(Color.accentColor, width: viewModel.imageScaleIndex == index ? 1.0 : 0)
         .onTapGesture {
-//            viewModel.selectedIndex = index
-            wallpaperViewModel.nextCurrentWallpaper = wallpaper
+            if NSEvent.modifierFlags.contains(.command) {
+                viewModel.toggleSelection(for: wallpaper)
+            } else {
+                viewModel.clearSelection()
+                wallpaperViewModel.nextCurrentWallpaper = wallpaper
+            }
         }
     }
 }

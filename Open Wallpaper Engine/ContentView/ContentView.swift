@@ -108,8 +108,35 @@ struct ContentView: View {
         } message: {
             Text("\(viewModel.hoveredWallpaper?.project.title ?? "invalid wallpaper")")
         }
+        .confirmationDialog("Batch Unsubscribe Confirmation",
+                            isPresented: $viewModel.isBatchUnsubscribeConfirming) {
+            Button("Delete All \(viewModel.selectedWallpapers.count) Immediately", role: .destructive) {
+                for url in viewModel.selectedWallpapers {
+                    try? FileManager.default.removeItem(at: url)
+                    if url == wallpaperViewModel.currentWallpaper.wallpaperDirectory {
+                        wallpaperViewModel.currentWallpaper = WEWallpaper(using: .invalid, where: Bundle.main.url(forResource: "WallpaperNotFound", withExtension: "mp4")!)
+                    }
+                }
+                viewModel.clearSelection()
+            }
+            Button("Move All \(viewModel.selectedWallpapers.count) to Trash") {
+                for url in viewModel.selectedWallpapers {
+                    try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
+                    if url == wallpaperViewModel.currentWallpaper.wallpaperDirectory {
+                        wallpaperViewModel.currentWallpaper = WEWallpaper(using: .invalid, where: Bundle.main.url(forResource: "WallpaperNotFound", withExtension: "mp4")!)
+                    }
+                }
+                viewModel.clearSelection()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            let items = viewModel.selectedWallpaperItems()
+            let names = items.prefix(3).map(\.project.title).joined(separator: ", ")
+            let suffix = items.count > 3 ? " and \(items.count - 3) more" : ""
+            Text("Unsubscribe \(items.count) wallpapers: \(names)\(suffix)")
+        }
         .alert(isPresented: $viewModel.importAlertPresented, error: viewModel.importAlertError) {
-            
+
         }
         .sheet(isPresented: $globalSettingsViewModel.isFirstLaunch) {
             FirstLaunchView()

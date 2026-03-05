@@ -2,3 +2,14 @@
 
 ## User settings
 xcuserdata/
+
+## Build products
+build/
+DerivedData/
+
+## OS junk
+.DS_Store
+Thumbs.db
+
+## Playwright MCP
+.playwright-mcp/

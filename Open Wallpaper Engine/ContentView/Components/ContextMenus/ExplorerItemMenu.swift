@@ -24,7 +24,7 @@ struct ExplorerItemMenu: SubviewOfContentView {
         Group {
             Section {
                 Button {
-                    
+
                 } label: {
                     Label("Add to Playlist", systemImage: "plus")
                 }.disabled(true)
@@ -33,6 +33,13 @@ struct ExplorerItemMenu: SubviewOfContentView {
                     viewModel.isUnsubscribeConfirming = true
                 } label: {
                     Label("Unsubscribe", systemImage: "xmark")
+                }
+                if viewModel.selectedWallpapers.count > 1 {
+                    Button(role: .destructive) {
+                        viewModel.isBatchUnsubscribeConfirming = true
+                    } label: {
+                        Label("Unsubscribe Selected (\(viewModel.selectedWallpapers.count))", systemImage: "xmark.circle")
+                    }
                 }
                 Button {
                     
