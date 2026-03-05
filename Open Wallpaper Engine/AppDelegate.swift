@@ -17,7 +17,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     
     var mainWindowController: MainWindowController!
     
-    var wallpaperWindow: NSWindow!
+    var wallpaperWindows: [NSWindow] = []
     
     var contentViewModel = ContentViewModel()
     var wallpaperViewModel = WallpaperViewModel()
@@ -34,7 +34,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         setSettingsWindow()
         
         // 创建桌面壁纸视窗
-        setWallpaperWindow()
+        setWallpaperWindows()
+
+        // 监听显示器连接/断开
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(screensChanged),
+            name: NSApplication.didChangeScreenParametersNotification, object: nil
+        )
         
         // 创建化左上角菜单栏
         setMainMenu()
@@ -61,7 +67,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         AppDelegate.shared.setPlacehoderWallpaper(with: wallpaperViewModel.currentWallpaper)
         
         // 显示桌面壁纸
-        self.wallpaperWindow.orderFront(nil)
+        for window in self.wallpaperWindows {
+            window.orderFront(nil)
+        }
         
         if globalSettingsViewModel.isFirstLaunch {
             self.mainWindowController.window.center()
@@ -83,7 +91,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     
     func applicationWillTerminate(_ notification: Notification) {
         if let wallpaper = UserDefaults.standard.url(forKey: "OSWallpaper") {
-            try? NSWorkspace.shared.setDesktopImageURL(wallpaper, for: .main!)
+            for screen in NSScreen.screens {
+                try? NSWorkspace.shared.setDesktopImageURL(wallpaper, for: screen)
+            }
         }
         
         let cacheDirectory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -142,29 +152,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.settingsWindow.contentView = NSHostingView(rootView: SettingsView().environmentObject(self.globalSettingsViewModel))
     }
     
-// MARK: Set Wallpaper Window - Most efforts
-    func setWallpaperWindow() {
-        self.wallpaperWindow = NSWindow()
-        
-        self.wallpaperWindow.styleMask = [.borderless, .fullSizeContentView]
-        self.wallpaperWindow.level = NSWindow.Level(Int(CGWindowLevelForKey(.desktopWindow)))
-        self.wallpaperWindow.collectionBehavior = .stationary
-        
-        self.wallpaperWindow.setFrame(NSRect(origin: .zero,
-                                             size: CGSize(width: NSScreen.main!.visibleFrame.size.width,
-                                                          height: NSScreen.main!.visibleFrame.size.height + NSScreen.main!.visibleFrame.origin.y + 1)
-                                            ),
-                                      display: true)
-        self.wallpaperWindow.isMovable = false
-        self.wallpaperWindow.titlebarAppearsTransparent = true
-        self.wallpaperWindow.titleVisibility = .hidden
-        self.wallpaperWindow.canHide = false
-        self.wallpaperWindow.canBecomeVisibleWithoutLogin = true
-        self.wallpaperWindow.isReleasedWhenClosed = false
-        
-        self.wallpaperWindow.contentView = NSHostingView(rootView:
-            WallpaperView(viewModel: self.wallpaperViewModel)
-        )
+// MARK: Set Wallpaper Windows - One per screen
+    func setWallpaperWindows() {
+        for screen in NSScreen.screens {
+            let window = NSWindow()
+            window.styleMask = [.borderless, .fullSizeContentView]
+            window.level = NSWindow.Level(Int(CGWindowLevelForKey(.desktopWindow)))
+            window.collectionBehavior = .stationary
+            window.setFrame(screen.frame, display: true)
+            window.isMovable = false
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            window.canHide = false
+            window.canBecomeVisibleWithoutLogin = true
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView:
+                WallpaperView(viewModel: self.wallpaperViewModel)
+            )
+            wallpaperWindows.append(window)
+        }
+    }
+
+    @objc func screensChanged() {
+        for window in wallpaperWindows { window.close() }
+        wallpaperWindows.removeAll()
+        setWallpaperWindows()
+        for window in wallpaperWindows { window.orderFront(nil) }
     }
     
     func windowWillClose(_ notification: Notification) {
@@ -173,46 +186,41 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     
     func setEventHandler() {
         self.eventHandler = NSEvent.addGlobalMonitorForEvents(matching: .any) { [weak self] event in
-            // contentView.subviews.first -> SwiftUIView.subviews.first -> WKWebView
-            if let webview = self?.wallpaperWindow.contentView?.subviews.first?.subviews.first,
-               let frontmostApplication = NSWorkspace.shared.frontmostApplication,
-                   webview is WKWebView,
-                   frontmostApplication.bundleIdentifier == "com.apple.finder" {
-                switch event.type {
-                case .scrollWheel:
-                    webview.scrollWheel(with: event)
-                case .mouseMoved:
-                    webview.mouseMoved(with: event)
-                case .mouseEntered:
-                    webview.mouseEntered(with: event)
-                case .mouseExited:
-                    webview.mouseExited(with: event)
+            guard let self = self,
+                  let frontmostApplication = NSWorkspace.shared.frontmostApplication,
+                  frontmostApplication.bundleIdentifier == "com.apple.finder" else { return }
 
-                case .leftMouseUp:
-                    fallthrough
-                case .rightMouseUp:
-                    webview.mouseUp(with: event)
-                    
-                case .leftMouseDown:
-                    webview.mouseDown(with: event)
-    //            case .rightMouseDown:
-    //                view?.mouseDown(with: event)
-                    
-                case .leftMouseDragged:
-                    fallthrough
-                case .rightMouseDragged:
-                    webview.mouseDragged(with: event)
-                    
-                default:
-                    break
-                }
+            // Find the WKWebView in whichever wallpaper window the event lands on
+            let mouseLocation = NSEvent.mouseLocation
+            guard let targetWindow = self.wallpaperWindows.first(where: { $0.frame.contains(mouseLocation) }),
+                  let webview = targetWindow.contentView?.subviews.first?.subviews.first,
+                  webview is WKWebView else { return }
+
+            switch event.type {
+            case .scrollWheel:
+                webview.scrollWheel(with: event)
+            case .mouseMoved:
+                webview.mouseMoved(with: event)
+            case .mouseEntered:
+                webview.mouseEntered(with: event)
+            case .mouseExited:
+                webview.mouseExited(with: event)
+            case .leftMouseUp, .rightMouseUp:
+                webview.mouseUp(with: event)
+            case .leftMouseDown:
+                webview.mouseDown(with: event)
+            case .leftMouseDragged, .rightMouseDragged:
+                webview.mouseDragged(with: event)
+            default:
+                break
             }
         }
     }
     
     func saveCurrentWallpaper() {
+        guard let mainScreen = NSScreen.main else { return }
         var wallpaper: URL {
-            var osWallpaper: URL { NSWorkspace.shared.desktopImageURL(for: .main!)! }
+            var osWallpaper: URL { NSWorkspace.shared.desktopImageURL(for: mainScreen)! }
             if let wallpaper = UserDefaults.standard.url(forKey: "OSWallpaper") {
                 if wallpaper != osWallpaper {
                     if !wallpaper.lastPathComponent.contains("staticWP") {
@@ -242,7 +250,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                         do {
                             let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "staticWP_\(wallpaper.wallpaperDirectory.hashValue).tiff")
                             try data.write(to: url, options: .atomic)
-                            try NSWorkspace.shared.setDesktopImageURL(url, for: .main!)
+                            for screen in NSScreen.screens {
+                                try NSWorkspace.shared.setDesktopImageURL(url, for: screen)
+                            }
                         } catch {
                             print(error)
                         }
