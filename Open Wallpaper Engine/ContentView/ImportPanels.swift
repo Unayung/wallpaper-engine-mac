@@ -6,6 +6,7 @@
 //
 
 import Cocoa
+import UniformTypeIdentifiers
 
 struct WPImportError: LocalizedError {
     var errorDescription: String?
@@ -32,9 +33,10 @@ struct WPImportError: LocalizedError {
 extension AppDelegate {
     @objc func openImportFromFolderPanel() {
         let panel = NSOpenPanel()
-        panel.canChooseFiles = false
+        panel.canChooseFiles = true
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.folder, .zip]
         panel.beginSheetModal(for: self.mainWindowController.window) { [weak self] response in
             if response != .OK { return }
             guard !panel.urls.isEmpty else { return }
@@ -42,11 +44,13 @@ extension AppDelegate {
             let fm = FileManager.default
             let docsDir = fm.wallpapersDirectory
 
-            // Collect wallpaper folders: each selected URL is either a wallpaper
-            // itself (contains project.json) or a parent containing wallpaper subfolders.
             var wallpaperURLs: [URL] = []
+            var zipURLs: [URL] = []
+
             for url in panel.urls {
-                if fm.fileExists(atPath: url.appending(path: "project.json").path) {
+                if url.pathExtension.lowercased() == "zip" {
+                    zipURLs.append(url)
+                } else if fm.fileExists(atPath: url.appending(path: "project.json").path) {
                     wallpaperURLs.append(url)
                 } else {
                     // Scan immediate children for wallpaper folders
@@ -65,7 +69,7 @@ extension AppDelegate {
                 }
             }
 
-            guard !wallpaperURLs.isEmpty else {
+            guard !wallpaperURLs.isEmpty || !zipURLs.isEmpty else {
                 DispatchQueue.main.async {
                     self?.contentViewModel.alertImportModal(which: .doesNotContainWallpaper)
                 }
@@ -78,6 +82,9 @@ extension AppDelegate {
                     if !fm.fileExists(atPath: dest.path) {
                         try? fm.copyItem(at: url, to: dest)
                     }
+                }
+                for url in zipURLs {
+                    ZipImporter.importZip(at: url)
                 }
             }
         }

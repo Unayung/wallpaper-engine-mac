@@ -366,6 +366,13 @@ class ContentViewModel: ObservableObject, DropDelegate {
                             .appending(path: url.lastPathComponent)
                     )
                 }
+            } else if wallpaper.isRegularFile, url.pathExtension.lowercased() == "zip" {
+                DispatchQueue.main.async {
+                    let count = ZipImporter.importZip(at: url)
+                    if count == 0 {
+                        self?.alertImportModal(which: .doesNotContainWallpaper)
+                    }
+                }
             } else if wallpaper.isRegularFile { // hello.mp4
                 guard let filename = wallpaper.filename, [".mp4", ".mov"].contains(filename.suffix(4).lowercased()) else { return }
                 
