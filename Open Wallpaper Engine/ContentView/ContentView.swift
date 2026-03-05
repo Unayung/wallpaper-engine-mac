@@ -62,7 +62,17 @@ struct ContentView: View {
                         default:
                             fatalError()
                         }
-                        ExplorerBottomBar()
+                        if viewModel.topTabBarSelection == 0 {
+                            HStack {
+                                Button {
+                                    AppDelegate.shared.openImportFromFolderPanel()
+                                } label: {
+                                    Label("Open Wallpaper", systemImage: "arrow.up.bin.fill")
+                                        .frame(width: 220)
+                                }
+                                Spacer()
+                            }
+                        }
                     }
                     .padding()
                     WallpaperPreview(contentViewModel: viewModel, wallpaperViewModel: wallpaperViewModel)

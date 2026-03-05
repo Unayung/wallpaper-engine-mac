@@ -22,7 +22,6 @@
 		5E66A0E82A8BA95600EE79D6 /* WallpaperPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E66A0E72A8BA95600EE79D6 /* WallpaperPreview.swift */; };
 		5E66A0EA2A8BAA5400EE79D6 /* ExplorerGlobalMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E66A0E92A8BAA5400EE79D6 /* ExplorerGlobalMenu.swift */; };
 		5E66A0ED2A8BABAB00EE79D6 /* DisplaySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E66A0EC2A8BABAB00EE79D6 /* DisplaySettings.swift */; };
-		5E66A0EF2A8BADC900EE79D6 /* ExplorerBottomBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E66A0EE2A8BADC900EE79D6 /* ExplorerBottomBar.swift */; };
 		5E7665262A2DC30E00E0E4B4 /* WEProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E7665252A2DC30D00E0E4B4 /* WEProject.swift */; };
 		5E76652A2A2E231400E0E4B4 /* AboutUsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E7665292A2E231400E0E4B4 /* AboutUsView.swift */; };
 		5E7A89C02AAB9D4E00192EB0 /* maxwell-cat.gif in Resources */ = {isa = PBXBuildFile; fileRef = 5E7A89BF2AAB9D4E00192EB0 /* maxwell-cat.gif */; };
@@ -87,7 +86,6 @@
 		5E66A0E72A8BA95600EE79D6 /* WallpaperPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperPreview.swift; sourceTree = "<group>"; };
 		5E66A0E92A8BAA5400EE79D6 /* ExplorerGlobalMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExplorerGlobalMenu.swift; sourceTree = "<group>"; };
 		5E66A0EC2A8BABAB00EE79D6 /* DisplaySettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplaySettings.swift; sourceTree = "<group>"; };
-		5E66A0EE2A8BADC900EE79D6 /* ExplorerBottomBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExplorerBottomBar.swift; sourceTree = "<group>"; };
 		5E7665252A2DC30D00E0E4B4 /* WEProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WEProject.swift; sourceTree = "<group>"; };
 		5E7665292A2E231400E0E4B4 /* AboutUsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutUsView.swift; sourceTree = "<group>"; };
 		5E7A89BF2AAB9D4E00192EB0 /* maxwell-cat.gif */ = {isa = PBXFileReference; lastKnownFileType = image.gif; path = "maxwell-cat.gif"; sourceTree = "<group>"; };
@@ -171,7 +169,6 @@
 				5EB4DB872A980532000A1FEA /* ExplorerItem.swift */,
 				5E66A0E02A8BA18D00EE79D6 /* GifImage.swift */,
 				5E32ABFD2A4D595D00A0EEEC /* FilterResults.swift */,
-				5E66A0EE2A8BADC900EE79D6 /* ExplorerBottomBar.swift */,
 				CC000000000000000000000C /* WorkshopView.swift */,
 			);
 			path = Components;
@@ -443,7 +440,6 @@
 				5E66A0E12A8BA18D00EE79D6 /* GifImage.swift in Sources */,
 				5EF28EBF2A8986AC0013ABBE /* WallpaperViewModel.swift in Sources */,
 				5E66A0DF2A8AE3C900EE79D6 /* ContentViewModel.swift in Sources */,
-				5E66A0EF2A8BADC900EE79D6 /* ExplorerBottomBar.swift in Sources */,
 				5E66A0E62A8BA69B00EE79D6 /* WallpaperExplorer.swift in Sources */,
 				5EA310FE2A88E135001A65F4 /* WebWallpaperView.swift in Sources */,
 				5EAD1DB82A88DFB80067E1D2 /* VideoWallpaperView.swift in Sources */,

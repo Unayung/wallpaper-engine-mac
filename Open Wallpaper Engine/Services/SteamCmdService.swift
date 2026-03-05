@@ -15,8 +15,19 @@ class SteamCmdService: ObservableObject {
         case failed(String)
     }
 
+    private static let lastUsernameKey = "SteamLastUsername"
+
     init() {
         detectSteamCmd()
+        attemptCachedLogin()
+    }
+
+    /// Automatically try cached session if we have a saved username and steamcmd is installed.
+    private func attemptCachedLogin() {
+        guard isInstalled, !isLoggedIn else { return }
+        if let saved = UserDefaults.standard.string(forKey: Self.lastUsernameKey), !saved.isEmpty {
+            loginWithCachedSession(username: saved)
+        }
     }
 
     func detectSteamCmd() {
@@ -111,6 +122,7 @@ class SteamCmdService: ObservableObject {
                 if output.contains("Logged in OK") || output.contains("OK") && process.terminationStatus == 0 {
                     self?.isLoggedIn = true
                     self?.loginError = nil
+                    UserDefaults.standard.set(username, forKey: Self.lastUsernameKey)
                 } else if output.contains("Steam Guard") || output.contains("Two-factor") {
                     self?.loginError = "Steam Guard code required"
                 } else if output.contains("Invalid Password") || output.contains("FAILED") {
@@ -156,6 +168,7 @@ class SteamCmdService: ObservableObject {
                 self?.isLoggingIn = false
                 if output.contains("Logged in OK") || (output.contains("OK") && process.terminationStatus == 0) {
                     self?.isLoggedIn = true
+                    UserDefaults.standard.set(username, forKey: Self.lastUsernameKey)
                 } else {
                     self?.loginError = "Cached session expired. Please log in with password."
                 }
