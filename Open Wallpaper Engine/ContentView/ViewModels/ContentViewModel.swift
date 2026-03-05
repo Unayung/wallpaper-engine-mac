@@ -51,6 +51,9 @@ class ContentViewModel: ObservableObject, DropDelegate {
     @Published var selectedWallpapers = Set<URL>()
     @Published var isBatchUnsubscribeConfirming = false
 
+    lazy var steamCmd = SteamCmdService()
+    lazy var workshopVM: WorkshopViewModel = WorkshopViewModel(steamCmd: steamCmd)
+
     @Published var searchText = ""
     
     @AppStorage("WallpapersPerPage") var wallpapersPerPage: Int = 50
