@@ -70,11 +70,6 @@ struct TopTabBar: SubviewOfContentView {
                     .frame(minWidth: 10)
                 Group {
                     Divider()
-                    Button { } label: {
-                        Label("Mobile", systemImage: "platter.filled.bottom.iphone")
-                            .contentShape(Rectangle())
-                    }
-                    Divider()
                     Button {
                         viewModel.isDisplaySettingsReveal = true
                     } label: {

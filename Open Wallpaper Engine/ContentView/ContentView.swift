@@ -95,16 +95,12 @@ struct ContentView: View {
             if let url = viewModel.hoveredWallpaper?.wallpaperDirectory {
                 Button("Delete Immediately", role: .destructive) {
                     try? FileManager.default.removeItem(at: url)
-                    if url == wallpaperViewModel.currentWallpaper.wallpaperDirectory {
-                        wallpaperViewModel.currentWallpaper = WEWallpaper(using: .invalid, where: Bundle.main.url(forResource: "WallpaperNotFound", withExtension: "mp4")!)
-                    }
+                    wallpaperViewModel.removeWallpaperFromAllScreens(directory: url)
                     viewModel.hoveredWallpaper = nil
                 }
                 Button("Move to Trash") {
                     try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
-                    if url == wallpaperViewModel.currentWallpaper.wallpaperDirectory {
-                        wallpaperViewModel.currentWallpaper = WEWallpaper(using: .invalid, where: Bundle.main.url(forResource: "WallpaperNotFound", withExtension: "mp4")!)
-                    }
+                    wallpaperViewModel.removeWallpaperFromAllScreens(directory: url)
                     viewModel.hoveredWallpaper = nil
                 }
             }
@@ -119,18 +115,14 @@ struct ContentView: View {
             Button("Delete All \(viewModel.selectedWallpapers.count) Immediately", role: .destructive) {
                 for url in viewModel.selectedWallpapers {
                     try? FileManager.default.removeItem(at: url)
-                    if url == wallpaperViewModel.currentWallpaper.wallpaperDirectory {
-                        wallpaperViewModel.currentWallpaper = WEWallpaper(using: .invalid, where: Bundle.main.url(forResource: "WallpaperNotFound", withExtension: "mp4")!)
-                    }
+                    wallpaperViewModel.removeWallpaperFromAllScreens(directory: url)
                 }
                 viewModel.clearSelection()
             }
             Button("Move All \(viewModel.selectedWallpapers.count) to Trash") {
                 for url in viewModel.selectedWallpapers {
                     try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
-                    if url == wallpaperViewModel.currentWallpaper.wallpaperDirectory {
-                        wallpaperViewModel.currentWallpaper = WEWallpaper(using: .invalid, where: Bundle.main.url(forResource: "WallpaperNotFound", withExtension: "mp4")!)
-                    }
+                    wallpaperViewModel.removeWallpaperFromAllScreens(directory: url)
                 }
                 viewModel.clearSelection()
             }

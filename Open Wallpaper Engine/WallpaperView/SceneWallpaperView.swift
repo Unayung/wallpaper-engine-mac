@@ -12,10 +12,12 @@ import SpriteKit
 struct SceneWallpaperView: NSViewRepresentable {
     @ObservedObject var wallpaperViewModel: WallpaperViewModel
     @StateObject var viewModel: SceneWallpaperViewModel
+    let screenId: String
 
-    init(wallpaperViewModel: WallpaperViewModel) {
+    init(wallpaperViewModel: WallpaperViewModel, screenId: String) {
         self.wallpaperViewModel = wallpaperViewModel
-        self._viewModel = StateObject(wrappedValue: SceneWallpaperViewModel(wallpaper: wallpaperViewModel.currentWallpaper))
+        self.screenId = screenId
+        self._viewModel = StateObject(wrappedValue: SceneWallpaperViewModel(wallpaper: wallpaperViewModel.wallpaper(for: screenId)))
     }
 
     func makeNSView(context: Context) -> SKView {
@@ -32,7 +34,7 @@ struct SceneWallpaperView: NSViewRepresentable {
     }
 
     func updateNSView(_ skView: SKView, context: Context) {
-        let selectedWallpaper = wallpaperViewModel.currentWallpaper
+        let selectedWallpaper = wallpaperViewModel.wallpaper(for: screenId)
         let currentWallpaper = viewModel.currentWallpaper
 
         // Update scene if wallpaper changed

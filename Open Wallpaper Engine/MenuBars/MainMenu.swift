@@ -120,10 +120,10 @@ extension AppDelegate {
     }
     
     @objc func toggleDesktopWallpaperWindow() {
-        if wallpaperWindows.first?.isVisible == true {
-            for window in wallpaperWindows { window.orderOut(nil) }
+        if wallpaperWindows.values.first?.isVisible == true {
+            for window in wallpaperWindows.values { window.orderOut(nil) }
         } else {
-            for window in wallpaperWindows { window.orderFront(nil) }
+            for window in wallpaperWindows.values { window.orderFront(nil) }
         }
     }
     

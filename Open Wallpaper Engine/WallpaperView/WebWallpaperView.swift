@@ -12,12 +12,14 @@ import WebKit
 struct WebWallpaperView: NSViewRepresentable {
     @ObservedObject var wallpaperViewModel: WallpaperViewModel
     @StateObject var viewModel: WebWallpaperViewModel
-    
-    init(wallpaperViewModel: WallpaperViewModel) {
+    let screenId: String
+
+    init(wallpaperViewModel: WallpaperViewModel, screenId: String) {
         self.wallpaperViewModel = wallpaperViewModel
-        self._viewModel = StateObject(wrappedValue: WebWallpaperViewModel(wallpaper: wallpaperViewModel.currentWallpaper))
+        self.screenId = screenId
+        self._viewModel = StateObject(wrappedValue: WebWallpaperViewModel(wallpaper: wallpaperViewModel.wallpaper(for: screenId)))
     }
-    
+
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         Self.enableFileAccess(on: configuration)
@@ -61,11 +63,11 @@ struct WebWallpaperView: NSViewRepresentable {
             if ObjCExceptionCatcher.performSafe({ prefs.setValue(true, forKey: key) }) { break }
         }
     }
-    
+
     func updateNSView(_ nsView: WKWebView, context: Context) {
-        let selectedWallpaper = wallpaperViewModel.currentWallpaper
+        let selectedWallpaper = wallpaperViewModel.wallpaper(for: screenId)
         let currentWallpaper = viewModel.currentWallpaper
-        
+
         if selectedWallpaper.wallpaperDirectory.appending(path: selectedWallpaper.project.file) != currentWallpaper.wallpaperDirectory.appending(path: currentWallpaper.project.file) {
             viewModel.currentWallpaper = selectedWallpaper
             Self.loadWallpaper(nsView, viewModel: viewModel)

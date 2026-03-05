@@ -17,10 +17,21 @@ Open Wallpaper Engine（修補版）
 - **[Haren Chen](https://github.com/haren724)** — [open-wallpaper-engine-mac](https://github.com/haren724/open-wallpaper-engine-mac) 原作者，建構核心架構（SwiftUI、影片桌布播放、匯入系統、播放清單 UI）
 - **[1ris_W](https://github.com/Erica-Iris)** — 中文 i18n 翻譯
 - **[Klaus Zhu](https://github.com/klauszhu1105)** — 應用程式圖示
+- **[Chen Chia Yang](https://github.com/Unayung)** — 場景桌布渲染、網頁桌布修復、Steam 創意工坊整合、多螢幕支援、Zip 匯入
 
 採用 [GPL-3.0](LICENSE) 授權，與原始專案相同。
 
-## 0.7.0 新功能
+## 0.8.0 新功能
+
+### 多螢幕支援
+為每個連接的螢幕指定不同的桌布，並可個別啟用或停用。
+- **顯示器設定面板** — 以視覺化佈局顯示所有連接的螢幕，點擊選取
+- **個別螢幕桌布** — 每個螢幕可獨立顯示不同的桌布
+- **啟用/停用切換** — 可針對每個螢幕開啟或關閉桌布
+- **自動偵測** — 新連接的螢幕會自動偵測並啟用
+
+### 播放設定 — 已修復
+效能播放設定（切換應用程式時暫停/靜音/停止）現在對所有桌布類型均可正常運作。
 
 ### Steam 創意工坊瀏覽器
 直接在應用程式內瀏覽、搜尋及下載 Steam 創意工坊的桌布。

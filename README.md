@@ -17,10 +17,21 @@ This project is built on top of the work of:
 - **[Haren Chen](https://github.com/haren724)** — Original creator of [open-wallpaper-engine-mac](https://github.com/haren724/open-wallpaper-engine-mac), built the core app architecture (SwiftUI, video wallpaper playback, import system, playlist UI)
 - **[1ris_W](https://github.com/Erica-Iris)** — Chinese i18n translation
 - **[Klaus Zhu](https://github.com/klauszhu1105)** — App logo icons
+- **[Chen Chia Yang](https://github.com/Unayung)** — Scene wallpaper rendering, web wallpaper fixes, Steam Workshop integration, multi-display support, zip import
 
 Licensed under [GPL-3.0](LICENSE), same as the original project.
 
-## What's New in 0.7.0
+## What's New in 0.8.0
+
+### Multi-Display Support
+Assign different wallpapers to each connected monitor with per-screen enable/disable control.
+- **Display Settings panel** — Visual monitor layout showing all connected screens, click to select
+- **Per-screen wallpaper** — Each display can show a different wallpaper independently
+- **Enable/disable toggle** — Turn wallpaper on or off per monitor
+- **Auto-detect** — New monitors are automatically detected and enabled when connected
+
+### Playback Settings — Fixed
+Performance playback settings (pause/mute/stop when other apps are focused) now work correctly for all wallpaper types.
 
 ### Steam Workshop Browser
 Browse, search, and download wallpapers directly from the Steam Workshop without leaving the app.

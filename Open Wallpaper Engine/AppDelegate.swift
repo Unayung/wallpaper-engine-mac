@@ -17,7 +17,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     
     var mainWindowController: MainWindowController!
     
-    var wallpaperWindows: [NSWindow] = []
+    var wallpaperWindows: [String: NSWindow] = [:]
     
     var contentViewModel = ContentViewModel()
     var wallpaperViewModel = WallpaperViewModel()
@@ -65,9 +65,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         saveCurrentWallpaper()
         AppDelegate.shared.setPlacehoderWallpaper(with: wallpaperViewModel.currentWallpaper)
-        
+
         // 显示桌面壁纸
-        for window in self.wallpaperWindows {
+        for (_, window) in self.wallpaperWindows {
             window.orderFront(nil)
         }
         
@@ -155,6 +155,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 // MARK: Set Wallpaper Windows - One per screen
     func setWallpaperWindows() {
         for screen in NSScreen.screens {
+            let screenId = WallpaperViewModel.screenId(for: screen)
+            guard wallpaperViewModel.isScreenEnabled(screenId) else { continue }
+
             let window = NSWindow()
             window.styleMask = [.borderless, .fullSizeContentView]
             window.level = NSWindow.Level(Int(CGWindowLevelForKey(.desktopWindow)))
@@ -167,17 +170,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.canBecomeVisibleWithoutLogin = true
             window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView:
-                WallpaperView(viewModel: self.wallpaperViewModel)
+                WallpaperView(viewModel: self.wallpaperViewModel, screenId: screenId)
             )
-            wallpaperWindows.append(window)
+            wallpaperWindows[screenId] = window
         }
     }
 
-    @objc func screensChanged() {
-        for window in wallpaperWindows { window.close() }
+    /// Rebuild wallpaper windows without changing enabled state.
+    func rebuildWallpaperWindows() {
+        for (_, window) in wallpaperWindows { window.close() }
         wallpaperWindows.removeAll()
         setWallpaperWindows()
-        for window in wallpaperWindows { window.orderFront(nil) }
+        for (_, window) in wallpaperWindows { window.orderFront(nil) }
+    }
+
+    /// Called when monitors connect/disconnect — auto-enables newly connected screens.
+    @objc func screensChanged() {
+        let connectedIds = Set(NSScreen.screens.map { WallpaperViewModel.screenId(for: $0) })
+        for id in connectedIds where !wallpaperViewModel.enabledScreens.contains(id) {
+            wallpaperViewModel.enabledScreens.insert(id)
+        }
+        rebuildWallpaperWindows()
     }
     
     func windowWillClose(_ notification: Notification) {
@@ -192,7 +205,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
             // Find the WKWebView in whichever wallpaper window the event lands on
             let mouseLocation = NSEvent.mouseLocation
-            guard let targetWindow = self.wallpaperWindows.first(where: { $0.frame.contains(mouseLocation) }),
+            guard let targetWindow = self.wallpaperWindows.values.first(where: { $0.frame.contains(mouseLocation) }),
                   let webview = targetWindow.contentView?.subviews.first?.subviews.first,
                   webview is WKWebView else { return }
 

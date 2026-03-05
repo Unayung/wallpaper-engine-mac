@@ -17,10 +17,21 @@ Open Wallpaper Engine（パッチ版）
 - **[Haren Chen](https://github.com/haren724)** — [open-wallpaper-engine-mac](https://github.com/haren724/open-wallpaper-engine-mac) のオリジナル作者、コアアーキテクチャを構築（SwiftUI、動画壁紙再生、インポートシステム、プレイリスト UI）
 - **[1ris_W](https://github.com/Erica-Iris)** — 中国語 i18n 翻訳
 - **[Klaus Zhu](https://github.com/klauszhu1105)** — アプリロゴアイコン
+- **[Chen Chia Yang](https://github.com/Unayung)** — シーン壁紙レンダリング、Web 壁紙修正、Steam Workshop 統合、マルチディスプレイ対応、Zip インポート
 
 [GPL-3.0](LICENSE) ライセンス（オリジナルプロジェクトと同一）。
 
-## 0.7.0 の新機能
+## 0.8.0 の新機能
+
+### マルチディスプレイ対応
+接続された各モニターに異なる壁紙を割り当て、画面ごとに有効/無効を制御できます。
+- **ディスプレイ設定パネル** — 接続されたすべての画面をビジュアルレイアウトで表示、クリックで選択
+- **画面ごとの壁紙** — 各ディスプレイで異なる壁紙を独立して表示
+- **有効/無効トグル** — モニターごとに壁紙のオン/オフを切り替え
+- **自動検出** — 新しいモニターは接続時に自動的に検出・有効化
+
+### 再生設定 — 修正済み
+パフォーマンス再生設定（他のアプリがフォーカスされた時の一時停止/ミュート/停止）がすべての壁紙タイプで正しく動作するようになりました。
 
 ### Steam Workshop ブラウザ
 アプリ内から直接 Steam Workshop の壁紙を閲覧、検索、ダウンロードできます。

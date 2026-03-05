@@ -10,15 +10,17 @@ import SwiftUI
 
 struct WallpaperView: View {
     @ObservedObject var viewModel: WallpaperViewModel
-    
+    let screenId: String
+
     var body: some View {
-        switch viewModel.currentWallpaper.project.type.lowercased() {
+        let wallpaper = viewModel.wallpaper(for: screenId)
+        switch wallpaper.project.type.lowercased() {
         case "video":
-            VideoWallpaperView(wallpaperViewModel: viewModel)
+            VideoWallpaperView(wallpaperViewModel: viewModel, screenId: screenId)
         case "scene":
-            SceneWallpaperView(wallpaperViewModel: viewModel)
+            SceneWallpaperView(wallpaperViewModel: viewModel, screenId: screenId)
         case "web":
-            WebWallpaperView(wallpaperViewModel: viewModel)
+            WebWallpaperView(wallpaperViewModel: viewModel, screenId: screenId)
         default:
             EmptyView()
         }

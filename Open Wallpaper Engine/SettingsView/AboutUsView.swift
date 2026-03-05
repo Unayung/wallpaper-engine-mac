@@ -30,16 +30,39 @@ struct AboutUsView: View {
                     Text("Wallpaper Engine for Mac").font(.footnote)
                 }
             }
-            VStack(spacing: 20) {
+            VStack(spacing: 12) {
                 Text("version: \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as! String)")
-                HStack {
-                    Text("Made with ❤️ by")
-                    Link("@haren724", destination: URL(string: "https://github.com/haren724")!)
+
+                Divider().frame(width: 200)
+
+                Text("Contributors")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    creditRow("Haren Chen", handle: "haren724", role: "Original creator")
+                    creditRow("MrWindDog", handle: "MrWindDog", role: "Upstream maintainer")
+                    creditRow("Chen Chia Yang", handle: "Unayung", role: "Scene rendering, Workshop, multi-display")
+                    creditRow("1ris_W", handle: "Erica-Iris", role: "Chinese i18n")
+                    creditRow("Klaus Zhu", handle: "klauszhu1105", role: "App logo icons")
                 }
-                .font(.footnote)
+                .font(.caption)
             }
         }
-        .frame(width: 400, height: 300)
+        .frame(width: 420, height: 380)
+    }
+}
+
+extension AboutUsView {
+    private func creditRow(_ name: String, handle: String, role: String) -> some View {
+        HStack(spacing: 4) {
+            Link("@\(handle)", destination: URL(string: "https://github.com/\(handle)")!)
+                .frame(width: 120, alignment: .leading)
+            Text("—")
+                .foregroundStyle(.tertiary)
+            Text(role)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
