@@ -21,11 +21,27 @@ struct WebWallpaperView: NSViewRepresentable {
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         Self.enableFileAccess(on: configuration)
+        configuration.allowsAirPlayForMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = []
 
         let nsView = WKWebView(frame: .zero, configuration: configuration)
         nsView.navigationDelegate = viewModel
-        nsView.loadFileURL(viewModel.fileUrl, allowingReadAccessTo: viewModel.readAccessURL)
+        Self.loadWallpaper(nsView, viewModel: viewModel)
         return nsView
+    }
+
+    /// Load wallpaper — uses loadHTMLString for URL-based wallpapers (YouTube/Vimeo)
+    /// so the origin isn't file://, or loadFileURL for local wallpapers.
+    private static func loadWallpaper(_ webView: WKWebView, viewModel: WebWallpaperViewModel) {
+        let fileUrl = viewModel.fileUrl
+        // Check if the HTML contains a redirect/embed to an external URL
+        if let html = try? String(contentsOf: fileUrl, encoding: .utf8),
+           html.contains("youtube.com") || html.contains("vimeo.com") {
+            // Load as HTML string with https origin so YouTube/Vimeo embeds work
+            webView.loadHTMLString(html, baseURL: URL(string: "https://localhost"))
+        } else {
+            webView.loadFileURL(fileUrl, allowingReadAccessTo: viewModel.readAccessURL)
+        }
     }
 
     /// Enable file:// cross-origin access for WebGL wallpapers.
@@ -52,7 +68,7 @@ struct WebWallpaperView: NSViewRepresentable {
         
         if selectedWallpaper.wallpaperDirectory.appending(path: selectedWallpaper.project.file) != currentWallpaper.wallpaperDirectory.appending(path: currentWallpaper.project.file) {
             viewModel.currentWallpaper = selectedWallpaper
-            nsView.loadFileURL(viewModel.fileUrl, allowingReadAccessTo: viewModel.readAccessURL)
+            Self.loadWallpaper(nsView, viewModel: viewModel)
         }
     }
 }

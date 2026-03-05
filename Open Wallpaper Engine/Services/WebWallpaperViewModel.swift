@@ -30,6 +30,11 @@ class WebWallpaperViewModel: NSObject, ObservableObject, WKNavigationDelegate {
         NotificationCenter.default.removeObserver(self)
     }
     
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        // Allow navigation to external URLs (e.g. YouTube embeds from URL-based web wallpapers)
+        decisionHandler(.allow)
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         let javascriptStyle = "var css = '*{-webkit-touch-callout:none;-webkit-user-select:none}'; var head = document.head || document.getElementsByTagName('head')[0]; var style = document.createElement('style'); style.type = 'text/css'; style.appendChild(document.createTextNode(css)); head.appendChild(style);"
         webView.evaluateJavaScript(javascriptStyle, completionHandler: nil)
