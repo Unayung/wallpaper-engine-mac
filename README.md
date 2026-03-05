@@ -1,6 +1,8 @@
 Open Wallpaper Engine (Patched)
 =========
 
+**English** | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
+
 [![GitHub license](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
 A patched fork of [Open Wallpaper Engine](https://github.com/MrWindDog/wallpaper-engine-mac) for macOS, adding scene wallpaper rendering and web wallpaper fixes.
