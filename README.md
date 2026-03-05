@@ -18,6 +18,26 @@ This project is built on top of the work of:
 
 Licensed under [GPL-3.0](LICENSE), same as the original project.
 
+## What's New in 0.7.0
+
+### Steam Workshop Browser
+Browse, search, and download wallpapers directly from the Steam Workshop without leaving the app.
+- **Search & filter** — Search by name, filter by content rating (Everyone/Questionable/Mature), type (Scene/Video/Web), and genre tags
+- **Sort options** — Trending, Most Recent, Most Popular, Most Subscribed
+- **steamcmd integration** — Auto-detects steamcmd (Homebrew or custom path), with install instructions if not found
+- **Steam login** — Supports password, Steam Guard, and cached session authentication
+- **Download with progress** — Real-time status updates during download (authenticating, downloading %, validating, copying)
+- **Safe defaults** — Content rating defaults to "Everyone" to filter out mature content
+
+### Zip Import
+Import wallpaper packages directly from `.zip` files — no need to manually extract first. Works via File > Import and drag-and-drop.
+
+### Multi-Select & Batch Unsubscribe
+Cmd+click to select multiple wallpapers, then right-click to batch unsubscribe.
+
+### Wallpaper Storage Isolation
+Wallpapers are now stored in `~/Documents/Open Wallpaper Engine/` instead of the raw Documents directory, preventing "error" wallpapers when cloning the repo on a fresh machine.
+
 ## What's Patched
 
 ### Web Wallpapers — Fixed gray/blank rendering
@@ -78,12 +98,18 @@ In Xcode, change the signing certificate to your own or select "Sign to Run Loca
 
 ## Usage
 
-### Import from Wallpaper Engine (Steam)
+### Browse & Download from Steam Workshop
 
-1. Open the app's File menu
-2. Select "Import from Folder"
-3. Choose your Wallpaper Engine workshop folder (typically `~/.steam/steam/steamapps/workshop/content/431960/`) or select individual wallpaper folders
-4. Each wallpaper folder should contain a `project.json` file
+1. Install steamcmd (`brew install steamcmd`) or point the app to an existing binary
+2. Switch to the **Workshop** tab and log in with your Steam account (must own Wallpaper Engine)
+3. Enter a [Steam Web API key](https://steamcommunity.com/dev/apikey) when prompted
+4. Search, filter, and click **Download** on any wallpaper
+
+### Import from Local Files
+
+- **Folder:** File > Import from Folder — select wallpaper folders containing `project.json`
+- **Zip:** File > Import or drag-and-drop a `.zip` file containing wallpaper packages
+- **Manual:** Copy wallpaper folders directly into `~/Documents/Open Wallpaper Engine/`
 
 ## Files Changed (vs upstream)
 
@@ -98,3 +124,9 @@ In Xcode, change the signing certificate to your own or select "Sign to Run Loca
 - `Services/SceneParsers/TEXParser.swift` — TEXV texture parser
 - `Services/SceneParsers/SceneModels.swift` — Scene JSON data models
 - `Services/SceneWallpaperViewModel.swift` — Scene loading and SpriteKit rendering
+- `Services/SteamCmdService.swift` — steamcmd detection, login, and workshop download
+- `Services/WorkshopAPIService.swift` — Steam Web API client for workshop browsing
+- `Services/WorkshopViewModel.swift` — Workshop browser state management
+- `Services/WallpaperDirectory.swift` — Centralized wallpaper storage path
+- `Services/ZipImporter.swift` — Zip file extraction and import
+- `ContentView/Components/WorkshopView.swift` — Workshop browser UI
