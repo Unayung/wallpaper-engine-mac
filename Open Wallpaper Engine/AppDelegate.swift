@@ -161,7 +161,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let window = NSWindow()
             window.styleMask = [.borderless, .fullSizeContentView]
             window.level = NSWindow.Level(Int(CGWindowLevelForKey(.desktopWindow)))
-            window.collectionBehavior = .stationary
+            window.collectionBehavior = [.stationary, .canJoinAllSpaces]
             window.setFrame(screen.frame, display: true)
             window.isMovable = false
             window.titlebarAppearsTransparent = true
@@ -198,7 +198,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     
     func setEventHandler() {
-        self.eventHandler = NSEvent.addGlobalMonitorForEvents(matching: .any) { [weak self] event in
+        // Only monitor event types we actually handle — .any causes main thread starvation
+        let relevantEvents: NSEvent.EventTypeMask = [
+            .scrollWheel, .mouseMoved, .mouseEntered, .mouseExited,
+            .leftMouseUp, .rightMouseUp, .leftMouseDown,
+            .leftMouseDragged, .rightMouseDragged
+        ]
+        self.eventHandler = NSEvent.addGlobalMonitorForEvents(matching: relevantEvents) { [weak self] event in
             guard let self = self,
                   let frontmostApplication = NSWorkspace.shared.frontmostApplication,
                   frontmostApplication.bundleIdentifier == "com.apple.finder" else { return }

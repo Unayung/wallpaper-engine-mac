@@ -22,6 +22,60 @@ class SteamCmdService: ObservableObject {
         attemptCachedLogin()
     }
 
+    /// Run a steamcmd process with proper pipe handling to avoid deadlocks.
+    /// Reads stdout/stderr concurrently with process execution and applies a timeout.
+    private func runSteamCmd(arguments: [String], timeout: TimeInterval = 30) -> (output: String, exitCode: Int32) {
+        guard let cmdPath = steamCmdPath else { return ("", -1) }
+
+        let process = Process()
+        let outputPipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: cmdPath)
+        process.arguments = arguments
+        process.standardOutput = outputPipe
+        process.standardError = outputPipe
+
+        // Read pipe concurrently to prevent buffer deadlock
+        var outputData = Data()
+        let readQueue = DispatchQueue(label: "steamcmd.pipe.read")
+        let handle = outputPipe.fileHandleForReading
+        handle.readabilityHandler = { fileHandle in
+            let data = fileHandle.availableData
+            if !data.isEmpty {
+                readQueue.sync { outputData.append(data) }
+            }
+        }
+
+        do {
+            try process.run()
+        } catch {
+            handle.readabilityHandler = nil
+            return ("Failed to run steamcmd: \(error.localizedDescription)", -1)
+        }
+
+        // Wait with timeout
+        let deadline = DispatchTime.now() + timeout
+        let waitGroup = DispatchGroup()
+        waitGroup.enter()
+        DispatchQueue.global().async {
+            process.waitUntilExit()
+            waitGroup.leave()
+        }
+
+        if waitGroup.wait(timeout: deadline) == .timedOut {
+            process.terminate()
+            handle.readabilityHandler = nil
+            return ("steamcmd timed out after \(Int(timeout))s", -1)
+        }
+
+        handle.readabilityHandler = nil
+        // Read any remaining data
+        let remaining = handle.readDataToEndOfFile()
+        readQueue.sync { outputData.append(remaining) }
+
+        let output = String(data: outputData, encoding: .utf8) ?? ""
+        return (output, process.terminationStatus)
+    }
+
     /// Automatically try cached session if we have a saved username and steamcmd is installed.
     private func attemptCachedLogin() {
         guard isInstalled, !isLoggedIn else { return }
@@ -53,21 +107,25 @@ class SteamCmdService: ObservableObject {
             }
         }
 
-        // Try `which` as fallback
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        process.arguments = ["steamcmd"]
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        try? process.run()
-        process.waitUntilExit()
+        // Try `which` as fallback — run on background thread to avoid blocking main thread
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let process = Process()
+            let pipe = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+            process.arguments = ["steamcmd"]
+            process.standardOutput = pipe
+            process.standardError = FileHandle.nullDevice
+            try? process.run()
+            process.waitUntilExit()
 
-        if process.terminationStatus == 0 {
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !path.isEmpty {
-                steamCmdPath = path
+            if process.terminationStatus == 0 {
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !path.isEmpty {
+                    DispatchQueue.main.async {
+                        self?.steamCmdPath = path
+                    }
+                }
             }
         }
     }
@@ -83,52 +141,35 @@ class SteamCmdService: ObservableObject {
 
     /// Attempt login with username and password. Steam Guard code is optional.
     func login(username: String, password: String, guardCode: String? = nil) {
-        guard let cmdPath = steamCmdPath else { return }
+        guard steamCmdPath != nil else { return }
 
         isLoggingIn = true
         loginError = nil
         steamUsername = username
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+
             var args = ["+login", username, password]
             if let code = guardCode, !code.isEmpty {
                 args = ["+login", username, password, code]
             }
             args += ["+quit"]
 
-            let process = Process()
-            let outputPipe = Pipe()
-            process.executableURL = URL(fileURLWithPath: cmdPath)
-            process.arguments = args
-            process.standardOutput = outputPipe
-            process.standardError = outputPipe
-
-            do {
-                try process.run()
-                process.waitUntilExit()
-            } catch {
-                DispatchQueue.main.async {
-                    self?.loginError = "Failed to run steamcmd: \(error.localizedDescription)"
-                    self?.isLoggingIn = false
-                }
-                return
-            }
-
-            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8) ?? ""
+            let (output, exitCode) = self.runSteamCmd(arguments: args, timeout: 60)
 
             DispatchQueue.main.async {
-                self?.isLoggingIn = false
-                if output.contains("Logged in OK") || output.contains("OK") && process.terminationStatus == 0 {
-                    self?.isLoggedIn = true
-                    self?.loginError = nil
+                self.isLoggingIn = false
+                if output.contains("Logged in OK") || (output.contains("OK") && exitCode == 0) {
+                    self.isLoggedIn = true
+                    self.loginError = nil
                     UserDefaults.standard.set(username, forKey: Self.lastUsernameKey)
                 } else if output.contains("Steam Guard") || output.contains("Two-factor") {
-                    self?.loginError = "Steam Guard code required"
+                    self.loginError = "Steam Guard code required"
                 } else if output.contains("Invalid Password") || output.contains("FAILED") {
-                    self?.loginError = "Invalid username or password"
+                    self.loginError = "Invalid username or password"
                 } else {
-                    self?.loginError = "Login failed. Check credentials and try again."
+                    self.loginError = "Login failed. Check credentials and try again."
                 }
             }
         }
@@ -136,41 +177,24 @@ class SteamCmdService: ObservableObject {
 
     /// Try login with cached session (no password needed if previously authenticated).
     func loginWithCachedSession(username: String) {
-        guard let cmdPath = steamCmdPath else { return }
+        guard steamCmdPath != nil else { return }
 
         isLoggingIn = true
         loginError = nil
         steamUsername = username
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let process = Process()
-            let outputPipe = Pipe()
-            process.executableURL = URL(fileURLWithPath: cmdPath)
-            process.arguments = ["+login", username, "+quit"]
-            process.standardOutput = outputPipe
-            process.standardError = outputPipe
+            guard let self = self else { return }
 
-            do {
-                try process.run()
-                process.waitUntilExit()
-            } catch {
-                DispatchQueue.main.async {
-                    self?.isLoggingIn = false
-                    self?.loginError = "Failed to run steamcmd"
-                }
-                return
-            }
-
-            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8) ?? ""
+            let (output, exitCode) = self.runSteamCmd(arguments: ["+login", username, "+quit"], timeout: 30)
 
             DispatchQueue.main.async {
-                self?.isLoggingIn = false
-                if output.contains("Logged in OK") || (output.contains("OK") && process.terminationStatus == 0) {
-                    self?.isLoggedIn = true
+                self.isLoggingIn = false
+                if output.contains("Logged in OK") || (output.contains("OK") && exitCode == 0) {
+                    self.isLoggedIn = true
                     UserDefaults.standard.set(username, forKey: Self.lastUsernameKey)
                 } else {
-                    self?.loginError = "Cached session expired. Please log in with password."
+                    self.loginError = "Cached session expired. Please log in with password."
                 }
             }
         }

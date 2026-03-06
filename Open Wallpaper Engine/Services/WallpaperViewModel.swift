@@ -40,10 +40,43 @@ class WallpaperViewModel: ObservableObject {
     /// The screen currently selected in the UI for configuration.
     @Published var selectedScreenId: String = ""
 
+    static let defaultWallpaper = WEWallpaper(using: .invalid, where: Bundle.main.url(forResource: "WallpaperNotFound", withExtension: "mp4")!)
+
+    // MARK: - Recent wallpapers
+
+    private static let maxRecents = 10
+    private static let recentsKey = "RecentWallpapers"
+
+    @Published var recentWallpapers: [WEWallpaper] = []
+
+    private func loadRecents() {
+        guard let data = UserDefaults.standard.data(forKey: Self.recentsKey),
+              let saved = try? JSONDecoder().decode([WEWallpaper].self, from: data) else { return }
+        recentWallpapers = saved.filter { $0.project != .invalid }
+    }
+
+    private func saveRecents() {
+        if let data = try? JSONEncoder().encode(recentWallpapers) {
+            UserDefaults.standard.set(data, forKey: Self.recentsKey)
+        }
+    }
+
+    func addToRecents(_ wallpaper: WEWallpaper) {
+        guard wallpaper.project != .invalid else { return }
+        recentWallpapers.removeAll { $0.wallpaperDirectory == wallpaper.wallpaperDirectory }
+        recentWallpapers.insert(wallpaper, at: 0)
+        if recentWallpapers.count > Self.maxRecents {
+            recentWallpapers = Array(recentWallpapers.prefix(Self.maxRecents))
+        }
+        saveRecents()
+    }
+
+    // MARK: - Wallpaper access
+
     /// Convenience: wallpaper for the currently selected screen in the UI.
     var currentWallpaper: WEWallpaper {
         get {
-            wallpapers[selectedScreenId] ?? WEWallpaper(using: .invalid, where: Bundle.main.url(forResource: "WallpaperNotFound", withExtension: "mp4")!)
+            wallpapers[selectedScreenId] ?? Self.defaultWallpaper
         }
         set {
             setWallpaper(newValue, for: selectedScreenId)
@@ -52,12 +85,13 @@ class WallpaperViewModel: ObservableObject {
 
     /// Get wallpaper for a specific screen.
     func wallpaper(for screenId: String) -> WEWallpaper {
-        wallpapers[screenId] ?? WEWallpaper(using: .invalid, where: Bundle.main.url(forResource: "WallpaperNotFound", withExtension: "mp4")!)
+        wallpapers[screenId] ?? Self.defaultWallpaper
     }
 
     /// Set wallpaper for a specific screen.
     func setWallpaper(_ wallpaper: WEWallpaper, for screenId: String) {
         wallpapers[screenId] = wallpaper
+        addToRecents(wallpaper)
     }
 
     func isScreenEnabled(_ screenId: String) -> Bool {
@@ -75,10 +109,9 @@ class WallpaperViewModel: ObservableObject {
 
     /// Remove a wallpaper from all screens (e.g., when unsubscribing).
     func removeWallpaperFromAllScreens(directory: URL) {
-        let invalid = WEWallpaper(using: .invalid, where: Bundle.main.url(forResource: "WallpaperNotFound", withExtension: "mp4")!)
-        for (screenId, wp) in wallpapers {
+        for (key, wp) in wallpapers {
             if wp.wallpaperDirectory == directory {
-                wallpapers[screenId] = invalid
+                wallpapers[key] = Self.defaultWallpaper
             }
         }
     }
@@ -135,7 +168,8 @@ class WallpaperViewModel: ObservableObject {
         // Load per-screen wallpapers
         if let data = UserDefaults.standard.data(forKey: "ScreenWallpapers"),
            let saved = try? JSONDecoder().decode([String: WEWallpaper].self, from: data) {
-            self.wallpapers = saved
+            // Filter out any compound keys (screenId_spaceId) from previous per-space experiment
+            self.wallpapers = saved.filter { !$0.key.contains("_") }
         }
         // Migrate legacy single wallpaper
         else if let json = UserDefaults.standard.data(forKey: "CurrentWallpaper"),
@@ -153,6 +187,9 @@ class WallpaperViewModel: ObservableObject {
 
         // Default selected screen to main
         self.selectedScreenId = Self.mainScreenId()
+
+        // Load recent wallpapers
+        loadRecents()
     }
 
     // MARK: - Screen ID helpers

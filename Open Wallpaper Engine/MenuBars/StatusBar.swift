@@ -38,16 +38,38 @@ extension AppDelegate {
         NSWorkspace.shared.open(URL(string: "https://github.com/haren724/open-wallpaper-engine-mac/wiki")!)
     }
 
+    @objc func selectRecentWallpaper(_ sender: NSMenuItem) {
+        guard let wallpaper = sender.representedObject as? WEWallpaper else { return }
+        wallpaperViewModel.nextCurrentWallpaper = wallpaper
+    }
+
+    func buildRecentWallpapersMenu() -> NSMenu {
+        let menu = NSMenu(title: String(localized: "Recent Wallpapers"))
+        let recents = wallpaperViewModel.recentWallpapers
+
+        if recents.isEmpty {
+            menu.addItem(NSMenuItem(title: String(localized: "No recent wallpapers"), action: nil, keyEquivalent: ""))
+        } else {
+            for wallpaper in recents {
+                let title = wallpaper.project.title.isEmpty ? "Untitled" : wallpaper.project.title
+                let typeLabel = wallpaper.project.type.isEmpty ? "" : " (\(wallpaper.project.type.capitalized))"
+                let item = NSMenuItem(title: "\(title)\(typeLabel)", action: #selector(selectRecentWallpaper(_:)), keyEquivalent: "")
+                item.representedObject = wallpaper
+                item.target = self
+                menu.addItem(item)
+            }
+        }
+
+        return menu
+    }
+
     func setStatusMenu() {
         // Recent Wallpapers Submenu
         let recentWallpapersMenuItem = NSMenuItem(title: String(localized: "Recent Wallpapers"), action: nil, keyEquivalent: "")
-        let recentWallpapersMenu = NSMenu(title: String(localized: "Recent Wallpapers"))
-        recentWallpapersMenu.items = [
-            .init(title: "Comming soon", action: nil, keyEquivalent: "")
-        ]
-        recentWallpapersMenuItem.submenu = recentWallpapersMenu
+        recentWallpapersMenuItem.submenu = buildRecentWallpapersMenu()
 
         let menu = NSMenu()
+        menu.delegate = self
         menu.items = [
             .init(title: String(localized: "Show Open Wallpaper Engine"),
                   systemImage: "photo",
@@ -103,6 +125,17 @@ extension AppDelegate {
             } else {
                 button.image = NSImage(systemSymbolName: "play.desktopcomputer", accessibilityDescription: nil)
             }
+        }
+    }
+}
+
+// MARK: - NSMenuDelegate — refresh Recent Wallpapers on menu open
+
+extension AppDelegate: NSMenuDelegate {
+    func menuWillOpen(_ menu: NSMenu) {
+        // Update the Recent Wallpapers submenu each time the status bar menu opens
+        if let recentItem = menu.items.first(where: { $0.title == String(localized: "Recent Wallpapers") }) {
+            recentItem.submenu = buildRecentWallpapersMenu()
         }
     }
 }

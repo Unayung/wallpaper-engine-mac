@@ -11,8 +11,17 @@ import Combine
 
 class VideoWallpaperViewModel: ObservableObject {
     var currentWallpaper: WEWallpaper {
-        willSet {
-            self.player.replaceCurrentItem(with: AVPlayerItem(url: newValue.wallpaperDirectory.appending(path: newValue.project.file)))
+        didSet {
+            // Remove observer for old item before replacing
+            if let oldItem = self.player.currentItem {
+                NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: oldItem)
+            }
+            let newItem = AVPlayerItem(url: currentWallpaper.wallpaperDirectory.appending(path: currentWallpaper.project.file))
+            self.player.replaceCurrentItem(with: newItem)
+            NotificationCenter.default.addObserver(self, selector: #selector(playerDidFinishPlaying(_:)), name: .AVPlayerItemDidPlayToEndTime, object: newItem)
+            // Force-apply rate and volume — replaceCurrentItem resets player to paused
+            self.player.rate = self.playRate
+            self.player.volume = self.playVolume
         }
     }
 
@@ -34,7 +43,7 @@ class VideoWallpaperViewModel: ObservableObject {
     init(wallpaper currentWallpaper: WEWallpaper) {
         self.currentWallpaper = currentWallpaper
         self.player = AVPlayer(url: currentWallpaper.wallpaperDirectory.appending(path: currentWallpaper.project.file))
-        NotificationCenter.default.addObserver(self, selector: #selector(playerDidFinishPlaying(_:)), name: .AVPlayerItemDidPlayToEndTime, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(playerDidFinishPlaying(_:)), name: .AVPlayerItemDidPlayToEndTime, object: self.player.currentItem)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemWillSleep(_:)), name: NSWorkspace.screensDidSleepNotification, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemDidWake(_:)), name: NSWorkspace.didWakeNotification, object: nil)
 

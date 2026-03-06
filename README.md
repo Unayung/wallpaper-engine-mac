@@ -30,6 +30,12 @@ Assign different wallpapers to each connected monitor with per-screen enable/dis
 - **Enable/disable toggle** — Turn wallpaper on or off per monitor
 - **Auto-detect** — New monitors are automatically detected and enabled when connected
 
+### Multi-Desktop Support
+Wallpapers now display across all macOS desktops (Spaces) with continuous playback — no interruption when switching desktops.
+
+### Recent Wallpapers Menu
+Quickly switch wallpapers from the status bar menu. The last 10 wallpapers you've used are listed for one-click access.
+
 ### Playback Settings — Fixed
 Performance playback settings (pause/mute/stop when other apps are focused) now work correctly for all wallpaper types.
 
