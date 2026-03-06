@@ -158,7 +158,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let screenId = WallpaperViewModel.screenId(for: screen)
             guard wallpaperViewModel.isScreenEnabled(screenId) else { continue }
 
-            let window = NSWindow()
+            let window = WallpaperWindow()
             window.styleMask = [.borderless, .fullSizeContentView]
             window.level = NSWindow.Level(Int(CGWindowLevelForKey(.desktopWindow)))
             window.collectionBehavior = [.stationary, .canJoinAllSpaces]
@@ -169,6 +169,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.canHide = false
             window.canBecomeVisibleWithoutLogin = true
             window.isReleasedWhenClosed = false
+            window.ignoresMouseEvents = true
             window.contentView = NSHostingView(rootView:
                 WallpaperView(viewModel: self.wallpaperViewModel, screenId: screenId)
             )
@@ -282,6 +283,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
     }
+}
+
+/// Non-interactive window that stays behind all other windows.
+class WallpaperWindow: NSWindow {
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
 }
 
 enum SettingsToolbarIdentifiers {

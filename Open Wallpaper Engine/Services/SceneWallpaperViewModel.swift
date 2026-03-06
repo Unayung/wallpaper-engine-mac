@@ -101,17 +101,19 @@ class SceneWallpaperViewModel: ObservableObject {
             skScene.backgroundColor = NSColor(red: c.r, green: c.g, blue: c.b, alpha: 1.0)
         }
 
-        // Only render image objects (skip particles/effects for reliability)
+        // Show only the base background image (no effects/particles/additive layers)
         var hasImage = false
         for obj in scene.objects {
             guard obj.visible != false, obj.image != nil else { continue }
+            // Skip additive/overlay layers that look like effects
             if let node = buildImageNode(obj, wallpaperDir: wallpaperDir) {
+                if node.blendMode == .add { continue }
                 skScene.addChild(node)
                 hasImage = true
             }
         }
 
-        // Fallback: if no images loaded, use preview.jpg as background
+        // Fallback: use preview image
         if !hasImage {
             let previewImage = loadPreviewImage(wallpaperDir: wallpaperDir)
             if let img = previewImage {
@@ -163,10 +165,14 @@ class SceneWallpaperViewModel: ObservableObject {
         let texture = SKTexture(image: image)
         let node = SKSpriteNode(texture: texture)
 
-        // Size from object or texture
+        // Size from object, or use pixel dimensions (not point size, which is halved on Retina)
         if let sizeStr = obj.size {
             let (w, h) = sizeStr.parseVector2()
             node.size = CGSize(width: w, height: h)
+        } else {
+            let pixelW = image.representations.first?.pixelsWide ?? Int(image.size.width)
+            let pixelH = image.representations.first?.pixelsHigh ?? Int(image.size.height)
+            node.size = CGSize(width: pixelW, height: pixelH)
         }
 
         // Position: WE uses top-left origin with Y-down, SpriteKit uses bottom-left with Y-up
