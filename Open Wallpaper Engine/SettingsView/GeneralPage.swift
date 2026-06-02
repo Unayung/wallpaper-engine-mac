@@ -29,7 +29,7 @@ struct GeneralPage: SettingsPage {
                     Text("Follow System").tag(GSLocalization.followSystem)
                     Text("English").tag(GSLocalization.en_US)
                     Text("Chinese Simplified").tag(GSLocalization.zh_CN)
-                }.disabled(true)
+                }
             } header: {
                 Label("Basic Setup", systemImage: "gearshape.fill")
             }

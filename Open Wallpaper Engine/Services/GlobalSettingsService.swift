@@ -117,6 +117,14 @@ class GlobalSettingsViewModel: ObservableObject {
     
     @Published var isFirstLaunch = UserDefaults.standard.value(forKey: "IsFirstLaunch") as? Bool ?? true
     
+    var locale: Locale {
+        switch settings.language {
+        case .en_US:      return Locale(identifier: "en")
+        case .zh_CN:      return Locale(identifier: "zh-Hans")
+        case .followSystem: return .current
+        }
+    }
+
     var didFinishLaunchingNotificationCancellable: Cancellable?
     var didActivateApplicationNotificationCancellable: Cancellable?
     var didCurrentWallpaperChangeCancellable: Cancellable?

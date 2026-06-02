@@ -1,0 +1,51 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Archive
+        run: |
+          xcodebuild archive \
+            -project "Open Wallpaper Engine.xcodeproj" \
+            -scheme "Open Wallpaper Engine" \
+            -destination "platform=macOS" \
+            -archivePath "$RUNNER_TEMP/OpenWallpaperEngine.xcarchive" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Bundle steamcmd into .app
+        run: |
+          APP=$(find "$RUNNER_TEMP/OpenWallpaperEngine.xcarchive/Products" -name "*.app" | head -1)
+          RESOURCES="$APP/Contents/Resources/steamcmd"
+          mkdir -p "$RESOURCES"
+          curl -sL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_osx.tar.gz \
+            | tar -xz -C "$RESOURCES"
+          chmod +x "$RESOURCES/steamcmd"
+
+      - name: Ad-hoc sign
+        run: |
+          APP=$(find "$RUNNER_TEMP/OpenWallpaperEngine.xcarchive/Products" -name "*.app" | head -1)
+          codesign --force --deep --sign - "$APP"
+
+      - name: Package .app
+        run: |
+          APP=$(find "$RUNNER_TEMP/OpenWallpaperEngine.xcarchive/Products" -name "*.app" | head -1)
+          ditto -c -k --keepParent "$APP" "Open-Wallpaper-Engine-macos.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Open-Wallpaper-Engine-macos
+          path: Open-Wallpaper-Engine-macos.zip
+          retention-days: 7

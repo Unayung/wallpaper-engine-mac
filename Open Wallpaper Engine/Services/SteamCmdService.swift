@@ -92,6 +92,15 @@ class SteamCmdService: ObservableObject {
             return
         }
 
+        // Check bundled steamcmd inside the .app
+        if let resourcePath = Bundle.main.resourcePath {
+            let bundledPath = "\(resourcePath)/steamcmd/steamcmd"
+            if FileManager.default.isExecutableFile(atPath: bundledPath) {
+                steamCmdPath = bundledPath
+                return
+            }
+        }
+
         let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
         let searchPaths = [
             // Homebrew / system installs
