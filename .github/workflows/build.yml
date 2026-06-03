@@ -27,8 +27,13 @@ jobs:
       - name: Bundle DepotDownloader into .app
         run: |
           APP=$(find "$RUNNER_TEMP/OpenWallpaperEngine.xcarchive/Products" -name "*.app" | head -1)
-          LATEST=$(curl -s https://api.github.com/repos/SteamRE/DepotDownloader/releases/latest \
+          LATEST=$(curl -s -H "Authorization: Bearer ${{ github.token }}" \
+            https://api.github.com/repos/SteamRE/DepotDownloader/releases/latest \
             | jq -r '.tag_name')
+          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+            echo "Failed to resolve latest DepotDownloader tag"; exit 1
+          fi
+          echo "Bundling DepotDownloader $LATEST"
           for ARCH in arm64 x64; do
             DIR="$APP/Contents/Resources/depotdownloader/$ARCH"
             mkdir -p "$DIR"
