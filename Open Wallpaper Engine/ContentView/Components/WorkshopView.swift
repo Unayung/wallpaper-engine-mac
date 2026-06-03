@@ -21,7 +21,7 @@ struct WorkshopView: SubviewOfContentView {
     }
 }
 
-// MARK: - steamcmd Not Installed
+// MARK: - DepotDownloader Not Installed
 
 private struct SteamCmdNotInstalledView: View {
     @ObservedObject var steamCmd: SteamCmdService
@@ -33,16 +33,16 @@ private struct SteamCmdNotInstalledView: View {
                 .font(.system(size: 40))
                 .foregroundStyle(.secondary)
 
-            Text("steamcmd Not Found")
+            Text("DepotDownloader Not Found")
                 .font(.title2)
                 .bold()
 
-            Text("Steam Workshop requires steamcmd to download wallpapers.\nInstall it with Homebrew:")
+            Text("Steam Workshop requires DepotDownloader to download wallpapers.\nInstall it with Homebrew:")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
 
             HStack {
-                Text("brew install steamcmd")
+                Text("brew install depotdownloader")
                     .font(.system(.body, design: .monospaced))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -51,7 +51,7 @@ private struct SteamCmdNotInstalledView: View {
 
                 Button {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString("brew install steamcmd", forType: .string)
+                    NSPasteboard.general.setString("brew install depotdownloader", forType: .string)
                     isCopied = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) { isCopied = false }
                 } label: {
@@ -62,7 +62,7 @@ private struct SteamCmdNotInstalledView: View {
 
             Divider().frame(width: 200)
 
-            Text("Or locate an existing steamcmd binary:")
+            Text("Or locate an existing DepotDownloader binary:")
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
@@ -71,7 +71,7 @@ private struct SteamCmdNotInstalledView: View {
                 panel.canChooseFiles = true
                 panel.canChooseDirectories = false
                 panel.allowsMultipleSelection = false
-                panel.message = "Select the steamcmd executable"
+                panel.message = "Select the DepotDownloader executable"
                 if panel.runModal() == .OK, let url = panel.url {
                     steamCmd.setCustomPath(url.path)
                 }

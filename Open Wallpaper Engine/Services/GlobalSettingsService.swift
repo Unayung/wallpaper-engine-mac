@@ -41,7 +41,7 @@ enum GSAppearance: String, CaseIterable, Identifiable, Codable {
 
 enum GSLocalization: String, CaseIterable, Identifiable, Codable {
     var id: Self { self }
-    case en_US, zh_CN, followSystem
+    case en_US, zh_CN, zh_TW, ja, followSystem
 }
 
 enum GSVideoFramework: String, CaseIterable, Identifiable, Codable {
@@ -119,8 +119,10 @@ class GlobalSettingsViewModel: ObservableObject {
     
     var locale: Locale {
         switch settings.language {
-        case .en_US:      return Locale(identifier: "en")
-        case .zh_CN:      return Locale(identifier: "zh-Hans")
+        case .en_US:        return Locale(identifier: "en")
+        case .zh_CN:        return Locale(identifier: "zh-Hans")
+        case .zh_TW:        return Locale(identifier: "zh-Hant")
+        case .ja:           return Locale(identifier: "ja")
         case .followSystem: return .current
         }
     }

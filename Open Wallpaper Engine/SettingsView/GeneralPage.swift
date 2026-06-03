@@ -29,6 +29,8 @@ struct GeneralPage: SettingsPage {
                     Text("Follow System").tag(GSLocalization.followSystem)
                     Text("English").tag(GSLocalization.en_US)
                     Text("Chinese Simplified").tag(GSLocalization.zh_CN)
+                    Text("Traditional Chinese").tag(GSLocalization.zh_TW)
+                    Text("Japanese").tag(GSLocalization.ja)
                 }
             } header: {
                 Label("Basic Setup", systemImage: "gearshape.fill")

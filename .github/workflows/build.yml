@@ -24,14 +24,19 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
-      - name: Bundle steamcmd into .app
+      - name: Bundle DepotDownloader into .app
         run: |
           APP=$(find "$RUNNER_TEMP/OpenWallpaperEngine.xcarchive/Products" -name "*.app" | head -1)
-          RESOURCES="$APP/Contents/Resources/steamcmd"
-          mkdir -p "$RESOURCES"
-          curl -sL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_osx.tar.gz \
-            | tar -xz -C "$RESOURCES"
-          chmod +x "$RESOURCES/steamcmd"
+          LATEST=$(curl -s https://api.github.com/repos/SteamRE/DepotDownloader/releases/latest \
+            | jq -r '.tag_name')
+          for ARCH in arm64 x64; do
+            DIR="$APP/Contents/Resources/depotdownloader/$ARCH"
+            mkdir -p "$DIR"
+            curl -sL "https://github.com/SteamRE/DepotDownloader/releases/download/${LATEST}/DepotDownloader-macos-${ARCH}.zip" \
+              -o "/tmp/depot_${ARCH}.zip"
+            unzip -q "/tmp/depot_${ARCH}.zip" -d "$DIR"
+            chmod +x "$DIR/DepotDownloader"
+          done
 
       - name: Ad-hoc sign
         run: |
