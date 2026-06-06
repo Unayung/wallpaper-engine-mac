@@ -31,7 +31,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var eventHandler: Any?
 
     // Combine subscriptions that keep status-bar menu labels in sync with ViewModel state
-    private var cancellables = Set<AnyCancellable>()
+    var cancellables = Set<AnyCancellable>()
 
     static var shared = AppDelegate()
 
