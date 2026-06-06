@@ -198,24 +198,9 @@ class GlobalSettingsViewModel: ObservableObject {
         }
     }
     
-    func didChangeAdjustMenuBarTint(_ newValue: Bool) {
-        if newValue != true {
-            if let wallpaper = UserDefaults.standard.url(forKey: "OSWallpaper") {
-                try? NSWorkspace.shared.setDesktopImageURL(wallpaper, for: .main!)
-            }
-        } else {
-            do {
-                let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "staticWP_\(AppDelegate.shared.wallpaperViewModel.currentWallpaper.wallpaperDirectory.hashValue).tiff")
-                try NSWorkspace.shared.setDesktopImageURL(url, for: .main!)
-            } catch {
-                print(error)
-            }
-        }
-    }
-    
-    func didCurrentWallpaperChange(_ newValue: WEWallpaper) {
-        AppDelegate.shared.setPlacehoderWallpaper(with: newValue)
-    }
+    func didChangeAdjustMenuBarTint(_ newValue: Bool) {}
+
+    func didCurrentWallpaperChange(_ newValue: WEWallpaper) {}
     
     func reset() {
         settings = (try? JSONDecoder()
