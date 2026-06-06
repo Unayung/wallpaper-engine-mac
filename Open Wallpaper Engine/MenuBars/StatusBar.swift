@@ -1,10 +1,3 @@
-//
-//  Status.swift
-//  Open Wallpaper Engine
-//
-//  Created by Haren on 2023/8/8.
-//
-
 import Cocoa
 
 extension AppDelegate {
@@ -29,7 +22,6 @@ extension AppDelegate {
     }
 
     @objc func browseWorkshop() {
-        // Change tab selection to `Workshop`
         self.contentViewModel.topTabBarSelection = 1
         openMainWindow()
     }
@@ -64,7 +56,6 @@ extension AppDelegate {
     }
 
     func setStatusMenu() {
-        // Recent Wallpapers Submenu
         let recentWallpapersMenuItem = NSMenuItem(title: String(localized: "Recent Wallpapers"), action: nil, keyEquivalent: "")
         recentWallpapersMenuItem.submenu = buildRecentWallpapersMenu()
 
@@ -168,7 +159,6 @@ extension AppDelegate {
 
 extension AppDelegate: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
-        // Update the Recent Wallpapers submenu each time the status bar menu opens
         if let recentItem = menu.items.first(where: { $0.title == String(localized: "Recent Wallpapers") }) {
             recentItem.submenu = buildRecentWallpapersMenu()
         }

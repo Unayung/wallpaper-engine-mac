@@ -1,10 +1,3 @@
-//
-//  AppDelegate.swift
-//  Open Wallpaper Engine
-//
-//  Created by Haren on 2023/6/6.
-//
-
 import Cocoa
 import SwiftUI
 import WebKit
@@ -29,7 +22,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     var eventHandler: Any?
 
-    // Combine subscriptions that keep status-bar menu labels in sync with ViewModel state
     var cancellables = Set<AnyCancellable>()
 
     static var shared = AppDelegate()
@@ -38,23 +30,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Run as menu bar agent: no Dock icon, Cmd+Q does not accidentally quit
         NSApp.setActivationPolicy(.accessory)
 
-        // 创建设置视窗
         setSettingsWindow()
 
-        // 创建桌面壁纸视窗（由 WallpaperWindowManager 管理，含螢幕監聽）
         wallpaperWindowManager = WallpaperWindowManager(viewModel: wallpaperViewModel)
         wallpaperWindowManager.setup()
 
-        // 创建化左上角菜单栏
         setMainMenu()
-        
-        // 创建化右上角常驻菜单栏
         setStatusMenu()
-        
-        // 创建主视窗
         self.mainWindowController = MainWindowController()
-        
-        // 将外部输入传递到壁纸窗口
         AppDelegate.shared.setEventHandler()
     }
     
@@ -64,7 +47,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return dockMenu
     }
     
-// MARK: - delegate methods
     func applicationDidFinishLaunching(_ notification: Notification) {
         wallpaperWindowManager.showAll()
         
@@ -90,7 +72,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return false
     }
 
-// MARK: - misc methods
     @objc func openSettingsWindow() {
         NSApp.activate(ignoringOtherApps: true)
         self.settingsWindow.center()
@@ -106,7 +87,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.contentViewModel.isFilterReveal.toggle()
     }
     
-// MARK: Set Settings Window
     func setSettingsWindow() {
         self.settingsWindow = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 300),
@@ -143,7 +123,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                   let frontmostApplication = NSWorkspace.shared.frontmostApplication,
                   frontmostApplication.bundleIdentifier == "com.apple.finder" else { return }
 
-            // Find the WKWebView in whichever wallpaper window the event lands on
             let mouseLocation = NSEvent.mouseLocation
             guard let targetWindow = self.wallpaperWindows.values.first(where: { $0.frame.contains(mouseLocation) }),
                   let webview = targetWindow.contentView?.subviews.first?.subviews.first,

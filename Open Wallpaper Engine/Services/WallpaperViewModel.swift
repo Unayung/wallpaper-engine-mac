@@ -1,13 +1,5 @@
-//
-//  WallpaperViewModel.swift
-//  Open Wallpaper Engine
-//
-//  Created by Haren on 2023/8/14.
-//
-
 import SwiftUI
 
-/// Provide Wallpaper Database for WallpaperView and ContentView etc.
 class WallpaperViewModel: ObservableObject {
     @Published var nextCurrentWallpaper: WEWallpaper =
     WEWallpaper(using: .invalid, where: Bundle.main.url(forResource: "WallpaperNotFound", withExtension: "mp4")!) {
@@ -30,14 +22,12 @@ class WallpaperViewModel: ObservableObject {
         didSet { saveWallpapers() }
     }
 
-    /// Screens where wallpaper display is enabled.
     @Published var enabledScreens: Set<String> = [] {
         didSet {
             UserDefaults.standard.set(Array(enabledScreens), forKey: "EnabledScreens")
         }
     }
 
-    /// The screen currently selected in the UI for configuration.
     @Published var selectedScreenId: String = ""
 
     static let defaultWallpaper = WEWallpaper(using: .invalid, where: Bundle.main.url(forResource: "WallpaperNotFound", withExtension: "mp4")!)
@@ -73,7 +63,6 @@ class WallpaperViewModel: ObservableObject {
 
     // MARK: - Wallpaper access
 
-    /// Convenience: wallpaper for the currently selected screen in the UI.
     var currentWallpaper: WEWallpaper {
         get {
             wallpapers[selectedScreenId] ?? Self.defaultWallpaper
@@ -83,12 +72,10 @@ class WallpaperViewModel: ObservableObject {
         }
     }
 
-    /// Get wallpaper for a specific screen.
     func wallpaper(for screenId: String) -> WEWallpaper {
         wallpapers[screenId] ?? Self.defaultWallpaper
     }
 
-    /// Set wallpaper for a specific screen.
     func setWallpaper(_ wallpaper: WEWallpaper, for screenId: String) {
         wallpapers[screenId] = wallpaper
         addToRecents(wallpaper)
@@ -141,7 +128,6 @@ class WallpaperViewModel: ObservableObject {
     }
 
     init() {
-        // Load per-screen wallpapers
         if let data = UserDefaults.standard.data(forKey: "ScreenWallpapers"),
            let saved = try? JSONDecoder().decode([String: WEWallpaper].self, from: data) {
             // Filter out any compound keys (screenId_spaceId) from previous per-space experiment
@@ -154,17 +140,13 @@ class WallpaperViewModel: ObservableObject {
             self.wallpapers = [mainId: wallpaper]
         }
 
-        // Load enabled screens (default: all connected screens enabled)
         if let saved = UserDefaults.standard.array(forKey: "EnabledScreens") as? [String] {
             self.enabledScreens = Set(saved)
         } else {
             self.enabledScreens = Set(NSScreen.screens.map { Self.screenId(for: $0) })
         }
 
-        // Default selected screen to main
         self.selectedScreenId = Self.mainScreenId()
-
-        // Load recent wallpapers
         loadRecents()
     }
 

@@ -1,19 +1,3 @@
-//
-//  WallpaperWindowManager.swift
-//  Open Wallpaper Engine
-//
-// Owns every wallpaper NSWindow (one per screen) and reacts to
-// monitor connect/disconnect events. AppDelegate delegates all
-// wallpaper-window concerns here instead of doing them itself.
-//
-// Pattern demonstrated:
-//   - Single Responsibility: this class does one thing
-//   - Dependency Injection: receives WallpaperViewModel in init,
-//     does not reach into AppDelegate or any global singleton
-//   - Encapsulation: callers only see `windows` (read-only) and
-//     the three public methods below
-//
-
 import Cocoa
 import SwiftUI
 
@@ -22,8 +6,6 @@ final class WallpaperWindowManager {
     private(set) var windows: [String: NSWindow] = [:]
     private let viewModel: WallpaperViewModel
     private var screenChangeObserver: NSObjectProtocol?
-
-    // MARK: - Init / Deinit
 
     init(viewModel: WallpaperViewModel) {
         self.viewModel = viewModel
@@ -39,8 +21,6 @@ final class WallpaperWindowManager {
             NotificationCenter.default.removeObserver(observer)
         }
     }
-
-    // MARK: - Public API
 
     func setup() {
         for screen in NSScreen.screens {
@@ -60,8 +40,6 @@ final class WallpaperWindowManager {
         setup()
         showAll()
     }
-
-    // MARK: - Private
 
     private func screensChanged() {
         let connectedIds = Set(NSScreen.screens.map { WallpaperViewModel.screenId(for: $0) })

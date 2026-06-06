@@ -102,6 +102,7 @@ private struct SteamLoginView: View {
     @State private var password = ""
     @State private var guardCode = ""
     @State private var showGuardCode = false
+    @State private var hasAPIKey = !WorkshopAPIService.loadAPIKey().isEmpty
 
     var body: some View {
         VStack(spacing: 16) {
@@ -126,6 +127,15 @@ private struct SteamLoginView: View {
                 SecureField("Password", text: $password)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 260)
+
+                VStack(spacing: 4) {
+                    Text("A Steam Web API key is required to browse and download wallpapers.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    APIKeyInputView {
+                        hasAPIKey = !WorkshopAPIService.loadAPIKey().isEmpty
+                    }
+                }
 
                 if showGuardCode {
                     TextField("Steam Guard Code", text: $guardCode)
@@ -155,14 +165,14 @@ private struct SteamLoginView: View {
                         )
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(username.isEmpty || password.isEmpty || steamCmd.isLoggingIn)
+                    .disabled(username.isEmpty || password.isEmpty || !hasAPIKey || steamCmd.isLoggingIn)
 
                     if !username.isEmpty {
                         Button("Use Cached Session") {
                             steamCmd.loginWithCachedSession(username: username)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(steamCmd.isLoggingIn)
+                        .disabled(!hasAPIKey || steamCmd.isLoggingIn)
                     }
                 }
 
@@ -173,15 +183,6 @@ private struct SteamLoginView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-            }
-
-            // API Key section
-            VStack(spacing: 6) {
-                Divider().padding(.vertical, 8)
-                Text("You'll also need a Steam Web API key to browse the Workshop.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                APIKeyInputView {}
             }
         }
         .padding(40)

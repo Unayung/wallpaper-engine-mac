@@ -1,10 +1,3 @@
-//
-//  WebWallpaperViewModel.swift
-//  Open Wallpaper Engine
-//
-//  Created by Toby on 2023/8/28.
-//
-
 import WebKit
 import SwiftUI
 
@@ -19,15 +12,18 @@ class WebWallpaperViewModel: NSObject, ObservableObject, WKNavigationDelegate {
         currentWallpaper.wallpaperDirectory
     }
     
+    weak var webView: WKWebView?
+
     init(wallpaper: WEWallpaper) {
         self.currentWallpaper = wallpaper
         super.init()
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemWillSleep(_:)), name: NSWorkspace.screensDidSleepNotification, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemDidWake(_:)), name: NSWorkspace.didWakeNotification, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(spaceDidChange(_:)), name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
     }
-    
+
     deinit {
-        NotificationCenter.default.removeObserver(self)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
     
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
@@ -41,15 +37,17 @@ class WebWallpaperViewModel: NSObject, ObservableObject, WKNavigationDelegate {
         
     }
     
-    @objc func systemWillSleep(_ notification: Notification) {
-        // Handle going to sleep
-        print("System is going to sleep")
-        // Update your SwiftUI state here if needed
-    }
-        
+    @objc func systemWillSleep(_ notification: Notification) {}
+
     @objc func systemDidWake(_ notification: Notification) {
-        // Handle waking up
-        print("System woke up from sleep")
-        // Update your SwiftUI state here if needed
+        webView?.reload()
+    }
+
+    @objc func spaceDidChange(_ notification: Notification) {
+        // Resume any paused HTML5 video/audio after Mission Control transition
+        webView?.evaluateJavaScript(
+            "document.querySelectorAll('video,audio').forEach(m => { if(m.paused) m.play(); })",
+            completionHandler: nil
+        )
     }
 }
