@@ -131,10 +131,9 @@ private struct SteamLoginView: View {
                 VStack(spacing: 4) {
                     Text("A Steam Web API key is required to browse and download wallpapers.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
-                    APIKeyInputView {
+                    APIKeyInputView(buttonTitle: "Save", onSave: {
                         hasAPIKey = !WorkshopAPIService.loadAPIKey().isEmpty
-                    }
+                    })
                 }
 
                 if showGuardCode {
@@ -484,6 +483,7 @@ private struct APIKeySetupView: View {
 
 private struct APIKeyInputView: View {
     @State private var apiKey = WorkshopAPIService.loadAPIKey()
+    var buttonTitle: LocalizedStringKey = "Save & Search"
     var onSave: () -> Void
 
     var body: some View {
@@ -491,10 +491,10 @@ private struct APIKeyInputView: View {
             HStack {
                 TextField("Steam Web API Key", text: $apiKey)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 300)
+                    .frame(width: 260)
                     .onSubmit { save() }
 
-                Button("Save & Search") { save() }
+                Button(buttonTitle) { save() }
                     .buttonStyle(.borderedProminent)
                     .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
             }
