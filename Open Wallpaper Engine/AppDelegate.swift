@@ -9,39 +9,43 @@ import Cocoa
 import SwiftUI
 import AVKit
 import WebKit
+import Combine
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
-    
+
     var statusItem: NSStatusItem!
     var settingsWindow: NSWindow!
-    
+
     var mainWindowController: MainWindowController!
-    
-    var wallpaperWindows: [String: NSWindow] = [:]
-    
+
+    var wallpaperWindowManager: WallpaperWindowManager!
+    // Backward-compatible proxy so GlobalSettingsService keeps compiling unchanged
+    var wallpaperWindows: [String: NSWindow] { wallpaperWindowManager.windows }
+
     var contentViewModel = ContentViewModel()
     var wallpaperViewModel = WallpaperViewModel()
     var globalSettingsViewModel = GlobalSettingsViewModel()
-    
+
     var importOpenPanel: NSOpenPanel!
-    
+
     var eventHandler: Any?
-    
+
+    // Combine subscriptions that keep status-bar menu labels in sync with ViewModel state
+    private var cancellables = Set<AnyCancellable>()
+
     static var shared = AppDelegate()
-    
+
     func applicationWillFinishLaunching(_ notification: Notification) {
+        // Run as menu bar agent: no Dock icon, Cmd+Q does not accidentally quit
+        NSApp.setActivationPolicy(.accessory)
+
         // 创建设置视窗
         setSettingsWindow()
-        
-        // 创建桌面壁纸视窗
-        setWallpaperWindows()
 
-        // 监听显示器连接/断开
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(screensChanged),
-            name: NSApplication.didChangeScreenParametersNotification, object: nil
-        )
-        
+        // 创建桌面壁纸视窗（由 WallpaperWindowManager 管理，含螢幕監聽）
+        wallpaperWindowManager = WallpaperWindowManager(viewModel: wallpaperViewModel)
+        wallpaperWindowManager.setup()
+
         // 创建化左上角菜单栏
         setMainMenu()
         
@@ -63,13 +67,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     
 // MARK: - delegate methods
     func applicationDidFinishLaunching(_ notification: Notification) {
+        recoverFromPreviousCrash()
         saveCurrentWallpaper()
         AppDelegate.shared.setPlacehoderWallpaper(with: wallpaperViewModel.currentWallpaper)
 
-        // 显示桌面壁纸
-        for (_, window) in self.wallpaperWindows {
-            window.orderFront(nil)
-        }
+        wallpaperWindowManager.showAll()
         
         if globalSettingsViewModel.isFirstLaunch {
             self.mainWindowController.window.center()
@@ -152,48 +154,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.settingsWindow.contentView = NSHostingView(rootView: SettingsView().environmentObject(self.globalSettingsViewModel))
     }
     
-// MARK: Set Wallpaper Windows - One per screen
-    func setWallpaperWindows() {
-        for screen in NSScreen.screens {
-            let screenId = WallpaperViewModel.screenId(for: screen)
-            guard wallpaperViewModel.isScreenEnabled(screenId) else { continue }
-
-            let window = WallpaperWindow()
-            window.styleMask = [.borderless, .fullSizeContentView]
-            window.level = NSWindow.Level(Int(CGWindowLevelForKey(.desktopWindow)))
-            window.collectionBehavior = [.stationary, .canJoinAllSpaces]
-            window.setFrame(screen.frame, display: true)
-            window.isMovable = false
-            window.titlebarAppearsTransparent = true
-            window.titleVisibility = .hidden
-            window.canHide = false
-            window.canBecomeVisibleWithoutLogin = true
-            window.isReleasedWhenClosed = false
-            window.ignoresMouseEvents = true
-            window.contentView = NSHostingView(rootView:
-                WallpaperView(viewModel: self.wallpaperViewModel, screenId: screenId)
-            )
-            wallpaperWindows[screenId] = window
-        }
-    }
-
-    /// Rebuild wallpaper windows without changing enabled state.
-    func rebuildWallpaperWindows() {
-        for (_, window) in wallpaperWindows { window.close() }
-        wallpaperWindows.removeAll()
-        setWallpaperWindows()
-        for (_, window) in wallpaperWindows { window.orderFront(nil) }
-    }
-
-    /// Called when monitors connect/disconnect — auto-enables newly connected screens.
-    @objc func screensChanged() {
-        let connectedIds = Set(NSScreen.screens.map { WallpaperViewModel.screenId(for: $0) })
-        for id in connectedIds where !wallpaperViewModel.enabledScreens.contains(id) {
-            wallpaperViewModel.enabledScreens.insert(id)
-        }
-        rebuildWallpaperWindows()
-    }
-    
     func windowWillClose(_ notification: Notification) {
         globalSettingsViewModel.reset()
     }
@@ -237,6 +197,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
     
+    /// Called on launch to clean up if the app crashed or was force-quit last time.
+    private func recoverFromPreviousCrash() {
+        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        let leftovers = (try? FileManager.default.contentsOfDirectory(
+            at: cacheDir, includingPropertiesForKeys: nil, options: .skipsHiddenFiles
+        ))?.filter { $0.lastPathComponent.hasPrefix("staticWP") } ?? []
+
+        guard !leftovers.isEmpty else { return }
+
+        // Restore original OS wallpaper first, then delete stale TIFFs
+        if let original = UserDefaults.standard.url(forKey: "OSWallpaper") {
+            for screen in NSScreen.screens {
+                try? NSWorkspace.shared.setDesktopImageURL(original, for: screen)
+            }
+        }
+        leftovers.forEach { try? FileManager.default.removeItem(at: $0) }
+    }
+
     func saveCurrentWallpaper() {
         guard let mainScreen = NSScreen.main else { return }
         var wallpaper: URL {

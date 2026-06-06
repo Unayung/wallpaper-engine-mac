@@ -104,7 +104,7 @@ class WallpaperViewModel: ObservableObject {
         } else {
             enabledScreens.insert(screenId)
         }
-        AppDelegate.shared.rebuildWallpaperWindows()
+        AppDelegate.shared.wallpaperWindowManager.rebuild()
     }
 
     /// Remove a wallpaper from all screens (e.g., when unsubscribing).
@@ -117,50 +117,26 @@ class WallpaperViewModel: ObservableObject {
     }
 
     var lastPlayRate: Float = 1.0
-    @Published public var playRate: Float = 1.0 {
-        willSet {
-            if newValue == 0.0 {
-                for (index, item) in AppDelegate.shared.statusItem.menu!.items.enumerated() {
-                    if item.title == "Pause" {
-                        AppDelegate.shared.statusItem.menu!.items[index] =
-                            .init(title: "Resume", systemImage: "play.fill", action: #selector(AppDelegate.shared.resume), keyEquivalent: "")
-                    }
-                }
-            } else {
-                for (index, item) in AppDelegate.shared.statusItem.menu!.items.enumerated() {
-                    if item.title == "Resume" {
-                        AppDelegate.shared.statusItem.menu!.items[index] =
-                            .init(title: "Pause", systemImage: "pause.fill", action: #selector(AppDelegate.shared.pause), keyEquivalent: "")
-                    }
-                }
-            }
-        }
+    @Published public var playRate: Float =
+        UserDefaults.standard.object(forKey: "WPPlayRate") != nil
+            ? UserDefaults.standard.float(forKey: "WPPlayRate")
+            : 1.0
+    {
         didSet {
-            self.lastPlayRate = oldValue
+            lastPlayRate = oldValue == 0 ? lastPlayRate : oldValue
+            UserDefaults.standard.set(playRate, forKey: "WPPlayRate")
         }
     }
 
     var lastPlayVolume: Float = 1.0
-    @Published public var playVolume: Float = 1.0 {
-        willSet {
-            if newValue == 0.0 {
-                for (index, item) in AppDelegate.shared.statusItem.menu!.items.enumerated() {
-                    if item.title == "Mute" {
-                        AppDelegate.shared.statusItem.menu!.items[index] =
-                            .init(title: String(localized: "Unmute"), systemImage: "speaker.fill", action: #selector(AppDelegate.shared.unmute), keyEquivalent: "")
-                    }
-                }
-            } else {
-                for (index, item) in AppDelegate.shared.statusItem.menu!.items.enumerated() {
-                    if item.title == "Unmute" {
-                        AppDelegate.shared.statusItem.menu!.items[index] =
-                            .init(title: String(localized: "Mute"), systemImage: "speaker.slash.fill", action: #selector(AppDelegate.shared.mute), keyEquivalent: "")
-                    }
-                }
-            }
-        }
+    @Published public var playVolume: Float =
+        UserDefaults.standard.object(forKey: "WPPlayVolume") != nil
+            ? UserDefaults.standard.float(forKey: "WPPlayVolume")
+            : 1.0
+    {
         didSet {
-            self.lastPlayVolume = oldValue
+            lastPlayVolume = oldValue == 0 ? lastPlayVolume : oldValue
+            UserDefaults.standard.set(playVolume, forKey: "WPPlayVolume")
         }
     }
 

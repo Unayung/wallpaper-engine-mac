@@ -250,6 +250,12 @@ private struct WorkshopBrowserView: View {
                 Spacer()
                 ProgressView("Searching Workshop...")
                 Spacer()
+            } else if viewModel.needsAPIKey {
+                Spacer()
+                APIKeySetupView {
+                    Task { await viewModel.search() }
+                }
+                Spacer()
             } else if let error = viewModel.errorMessage, viewModel.items.isEmpty {
                 Spacer()
                 VStack(spacing: 12) {
@@ -259,10 +265,6 @@ private struct WorkshopBrowserView: View {
                     Text(error)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
-
-                    APIKeyInputView {
-                        Task { await viewModel.search() }
-                    }
                 }
                 Spacer()
             } else if viewModel.items.isEmpty {
@@ -277,16 +279,6 @@ private struct WorkshopBrowserView: View {
                     Text("Find wallpapers by name, tag, or browse trending content.")
                         .font(.callout)
                         .foregroundStyle(.tertiary)
-
-                    if WorkshopAPIService.loadAPIKey().isEmpty {
-                        Divider().frame(width: 300).padding(.vertical, 4)
-                        Text("A Steam Web API key is required to browse.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                        APIKeyInputView {
-                            Task { await viewModel.search() }
-                        }
-                    }
                 }
                 Spacer()
             } else {
@@ -455,6 +447,35 @@ private struct WorkshopItemCard: View {
             return String(format: "%.1fK", Double(count) / 1_000)
         }
         return "\(count)"
+    }
+}
+
+// MARK: - API Key Setup (first-time onboarding, not an error)
+
+private struct APIKeySetupView: View {
+    var onSave: () -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "key.fill")
+                .font(.system(size: 40))
+                .foregroundStyle(.secondary)
+
+            Text("Steam Web API Key Required")
+                .font(.title2)
+                .bold()
+
+            Text("To browse the Steam Workshop, you need a free Steam Web API key.\nGet one at steamcommunity.com/dev/apikey — it only takes a minute.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: 380)
+
+            APIKeyInputView(onSave: onSave)
+
+            Link("Open steamcommunity.com/dev/apikey", destination: URL(string: "https://steamcommunity.com/dev/apikey")!)
+                .font(.caption)
+        }
+        .padding(40)
     }
 }
 
