@@ -29,6 +29,9 @@ class SceneWallpaperViewModel: ObservableObject {
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(spaceDidChange(_:)),
             name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(spaceDidChange(_:)),
+            name: NSWorkspace.didActivateApplicationNotification, object: nil)
         loadScene(from: wallpaper)
     }
 

@@ -20,6 +20,7 @@ class WebWallpaperViewModel: NSObject, ObservableObject, WKNavigationDelegate {
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemWillSleep(_:)), name: NSWorkspace.screensDidSleepNotification, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemDidWake(_:)), name: NSWorkspace.didWakeNotification, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(spaceDidChange(_:)), name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(spaceDidChange(_:)), name: NSWorkspace.didActivateApplicationNotification, object: nil)
     }
 
     deinit {

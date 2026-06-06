@@ -40,6 +40,7 @@ class VideoWallpaperViewModel: ObservableObject {
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemWillSleep(_:)), name: NSWorkspace.screensDidSleepNotification, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemDidWake(_:)), name: NSWorkspace.didWakeNotification, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(spaceDidChange(_:)), name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(spaceDidChange(_:)), name: NSWorkspace.didActivateApplicationNotification, object: nil)
 
         let wvm = AppDelegate.shared.wallpaperViewModel
         wvm.$playRate
@@ -52,6 +53,16 @@ class VideoWallpaperViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] volume in
                 self?.playVolume = volume
+            }
+            .store(in: &cancellables)
+
+        player.publisher(for: \.timeControlStatus)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                guard let self, status == .paused, self.playRate > 0 else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    if self.playRate > 0 { self.player.rate = self.playRate }
+                }
             }
             .store(in: &cancellables)
     }
