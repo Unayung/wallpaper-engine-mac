@@ -31,8 +31,8 @@ class VideoWallpaperViewModel: ObservableObject {
 
     var player = AVPlayer()
     private var cancellables = Set<AnyCancellable>()
-    // Retry schedule (seconds) for unexpected pauses (e.g. Stage Manager animation)
-    private static let resumeDelays: [Double] = [0.2, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
+    // Retry schedule (seconds) for unexpected pauses (e.g. Stage Manager freeze)
+    private static let resumeDelays: [Double] = [0.2, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 10.0, 20.0, 30.0]
 
     init(wallpaper currentWallpaper: WEWallpaper) {
         self.currentWallpaper = currentWallpaper
@@ -113,6 +113,13 @@ class VideoWallpaperViewModel: ObservableObject {
     }
 
     @objc func spaceDidChange(_ notification: Notification) {
-        self.player.rate = self.playRate
+        guard playRate > 0 else { return }
+        // Seek to current position forces AVPlayerLayer to push a fresh frame to the
+        // compositor, recovering from the Stage Manager snapshot freeze without waiting
+        // for the system to spontaneously refresh (which can take over a minute).
+        player.seek(to: player.currentTime()) { [weak self] _ in
+            guard let self, self.playRate > 0 else { return }
+            self.player.rate = self.playRate
+        }
     }
 }
