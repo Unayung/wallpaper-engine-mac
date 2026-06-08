@@ -7,6 +7,10 @@ final class WallpaperWindowManager {
     private let viewModel: WallpaperViewModel
     private var screenChangeObserver: NSObjectProtocol?
     private var appActivateObserver: NSObjectProtocol?
+    // Heartbeat: catches compositor freezes that no notification covers
+    // (e.g. minimizing a window within the same Stage Manager group)
+    private var redrawTimer: DispatchSourceTimer?
+    private static let redrawInterval: DispatchTimeInterval = .seconds(2)
 
     init(viewModel: WallpaperViewModel) {
         self.viewModel = viewModel
@@ -16,16 +20,22 @@ final class WallpaperWindowManager {
             queue: .main
         ) { [weak self] _ in self?.screensChanged() }
 
-        // Stage Manager switches app groups without changing Space — force compositor
-        // to redraw wallpaper windows in case of visual-only (non-AVPlayer-level) freeze
         appActivateObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in self?.forceCompositorRedraw() }
+
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + WallpaperWindowManager.redrawInterval,
+                       repeating: WallpaperWindowManager.redrawInterval)
+        timer.setEventHandler { [weak self] in self?.forceCompositorRedraw() }
+        timer.resume()
+        redrawTimer = timer
     }
 
     deinit {
+        redrawTimer?.cancel()
         if let observer = screenChangeObserver {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -55,8 +65,9 @@ final class WallpaperWindowManager {
 
     private func forceCompositorRedraw() {
         for window in windows.values {
-            window.contentView?.displayIfNeeded()
-            window.update()
+            guard let contentView = window.contentView else { continue }
+            contentView.layer?.setNeedsDisplay()
+            contentView.display()  // Unconditional — displayIfNeeded only works if dirty flag is set
         }
     }
 

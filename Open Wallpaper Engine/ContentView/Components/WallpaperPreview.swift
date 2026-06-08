@@ -81,25 +81,16 @@ struct WallpaperPreview: SubviewOfContentView {
                             
                         }
                     }
-                    HStack {
-                        Image("we.placeholder")
-                            .resizable()
-                            .frame(width: 32, height: 32)
-                        Text("Unkown Author")
-                    }
-                    HStack {
-                        HStack(spacing: 5) {
-                            Image(systemName: "star")
-                            Image(systemName: "star")
-                            Image(systemName: "star")
-                            Image(systemName: "star")
-                            Image(systemName: "star")
+                    if let workshopurl = wallpaperViewModel.currentWallpaper.project.workshopurl,
+                       !workshopurl.isEmpty,
+                       let url = URL(string: workshopurl) {
+                        HStack {
+                            Image("we.placeholder")
+                                .resizable()
+                                .frame(width: 32, height: 32)
+                            Link("Steam Workshop", destination: url)
+                                .font(.caption)
                         }
-                        .font(.caption)
-                        Button { } label: {
-                            Image(systemName: "heart")
-                        }
-                        .disabled(true)
                     }
                     HStack {
                         Text(wallpaperViewModel.currentWallpaper.project.type)
@@ -154,26 +145,34 @@ struct WallpaperPreview: SubviewOfContentView {
                         }
                     }
                     VStack(spacing: 3) {
-                        Button { } label: {
-                            Label("Unsubscribe", systemImage: "xmark")
+                        Button {
+                            viewModel.hoveredWallpaper = wallpaperViewModel.currentWallpaper
+                            viewModel.isUnsubscribeConfirming = true
+                        } label: {
+                            Label("Delete", systemImage: "trash")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.red)
-                        HStack(spacing: 3) {
-                            Button { } label: {
-                                Label("Comment", systemImage: "text.badge.star")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            Button { } label: {
-                                Image(systemName: "doc.on.doc.fill")
-                            }
-                            Button { } label: {
-                                Image(systemName: "exclamationmark.triangle.fill")
+                        if let workshopurl = wallpaperViewModel.currentWallpaper.project.workshopurl,
+                           !workshopurl.isEmpty,
+                           let url = URL(string: workshopurl) {
+                            HStack(spacing: 3) {
+                                Button {
+                                    NSWorkspace.shared.open(url)
+                                } label: {
+                                    Label("Comment", systemImage: "text.badge.star")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                Button {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(workshopurl, forType: .string)
+                                } label: {
+                                    Image(systemName: "doc.on.doc.fill")
+                                }
                             }
                         }
                     }
-                    .disabled(true)
                     // MARK: Properties
                     HStack(spacing: 3) {
                         Text("Properties")
