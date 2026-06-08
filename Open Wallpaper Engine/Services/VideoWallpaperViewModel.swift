@@ -62,6 +62,7 @@ class VideoWallpaperViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in
                 guard let self, status == .paused, self.playRate > 0 else { return }
+                WELogger.shared.verbose("AVPlayer unexpected pause — scheduling resume")
                 self.scheduleResume(attempt: 0)
             }
             .store(in: &cancellables)
@@ -71,14 +72,21 @@ class VideoWallpaperViewModel: ObservableObject {
     // Each successful re-kick resets the schedule if the system pauses again (timeControlStatus fires).
     private func scheduleResume(attempt: Int) {
         let delays = VideoWallpaperViewModel.resumeDelays
-        guard attempt < delays.count, playRate > 0 else { return }
+        guard attempt < delays.count, playRate > 0 else {
+            if playRate > 0 {
+                WELogger.shared.error("AVPlayer resume exhausted all \(VideoWallpaperViewModel.resumeDelays.count) attempts")
+            }
+            return
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + delays[attempt]) { [weak self] in
             guard let self, self.playRate > 0 else { return }
             if self.player.timeControlStatus == .paused {
+                WELogger.shared.verbose("AVPlayer resume attempt \(attempt + 1) — re-kicking rate")
                 self.player.rate = self.playRate
                 self.scheduleResume(attempt: attempt + 1)
+            } else {
+                WELogger.shared.verbose("AVPlayer resumed after attempt \(attempt + 1)")
             }
-            // If playing, stop — timeControlStatus publisher will re-trigger if paused again
         }
     }
 

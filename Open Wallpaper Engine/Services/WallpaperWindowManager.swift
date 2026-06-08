@@ -7,8 +7,8 @@ final class WallpaperWindowManager {
     private let viewModel: WallpaperViewModel
     private var screenChangeObserver: NSObjectProtocol?
     private var appActivateObserver: NSObjectProtocol?
-    // Heartbeat: catches compositor freezes that no notification covers
-    // (e.g. minimizing a window within the same Stage Manager group)
+    private var occlusionObservers: [NSObjectProtocol] = []
+    // Heartbeat: backstop for any case notifications miss
     private var redrawTimer: DispatchSourceTimer?
     private static let redrawInterval: DispatchTimeInterval = .seconds(2)
 
@@ -24,18 +24,25 @@ final class WallpaperWindowManager {
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
-        ) { [weak self] _ in self?.forceCompositorRedraw() }
+        ) { [weak self] _ in
+            WELogger.shared.verbose("compositor redraw — app activation")
+            self?.forceCompositorRedraw()
+        }
 
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + WallpaperWindowManager.redrawInterval,
                        repeating: WallpaperWindowManager.redrawInterval)
-        timer.setEventHandler { [weak self] in self?.forceCompositorRedraw() }
+        timer.setEventHandler { [weak self] in
+            WELogger.shared.verbose("compositor redraw — heartbeat")
+            self?.forceCompositorRedraw()
+        }
         timer.resume()
         redrawTimer = timer
     }
 
     deinit {
         redrawTimer?.cancel()
+        occlusionObservers.forEach { NotificationCenter.default.removeObserver($0) }
         if let observer = screenChangeObserver {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -96,6 +103,18 @@ final class WallpaperWindowManager {
         window.contentView = NSHostingView(
             rootView: WallpaperView(viewModel: viewModel, screenId: screenId)
         )
+        // Fire redraw the moment this window transitions back to visible after a
+        // Stage Manager animation — more precise than the heartbeat timer alone
+        let obs = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification,
+            object: window,
+            queue: .main
+        ) { [weak self, weak window] _ in
+            guard let window, window.occlusionState.contains(.visible) else { return }
+            WELogger.shared.verbose("compositor redraw — occlusion became visible (\(screenId))")
+            self?.forceCompositorRedraw()
+        }
+        occlusionObservers.append(obs)
         return window
     }
 }

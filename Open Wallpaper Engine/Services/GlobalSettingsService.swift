@@ -254,6 +254,7 @@ class GlobalSettingsViewModel: ObservableObject {
         case .followSystem:
             NSApp.appearance = nil
         }
+        WELogger.shared.level = settings.logLevel
     }
     
     func activateApplicationDidChange() {

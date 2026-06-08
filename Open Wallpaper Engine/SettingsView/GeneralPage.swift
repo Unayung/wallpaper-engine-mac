@@ -88,6 +88,24 @@ struct GeneralPage: SettingsPage {
                     Text("Errors Only").tag(GSLogLevel.error)
                     Text("Verbose").tag(GSLogLevel.verbose)
                 }
+                if viewModel.settings.logLevel != .none {
+                    HStack {
+                        Text(WELogger.shared.logDirURL.path)
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer()
+                        Button("Show") {
+                            NSWorkspace.shared.activateFileViewerSelecting(
+                                [WELogger.shared.todayLogURL])
+                        }
+                        Button("Clear") {
+                            WELogger.shared.clear()
+                        }
+                        .foregroundStyle(.red)
+                    }
+                }
             } header: {
                 Label("Developer", systemImage: "number")
             }
