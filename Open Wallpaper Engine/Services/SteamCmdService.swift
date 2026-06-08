@@ -8,7 +8,6 @@ class SteamCmdService: ObservableObject {
     @Published var loginError: String?
     @Published var isLoggingIn = false
     @Published var downloadProgress: [String: DownloadState] = [:]
-    @Published var pathError: String?
 
     enum DownloadState: Equatable {
         case downloading(status: String)
@@ -17,63 +16,127 @@ class SteamCmdService: ObservableObject {
     }
 
     private static let lastUsernameKey = "SteamLastUsername"
-    private var sessionPassword: String = ""
 
     init() {
         detectSteamCmd()
         attemptCachedLogin()
     }
 
-    // MARK: - Detection
+    /// Run a steamcmd process with proper pipe handling to avoid deadlocks.
+    /// Reads stdout/stderr concurrently with process execution and applies a timeout.
+    private func runSteamCmd(arguments: [String], timeout: TimeInterval = 30) -> (output: String, exitCode: Int32) {
+        guard let cmdPath = steamCmdPath else { return ("", -1) }
 
-    func detectSteamCmd() {
-        if let custom = UserDefaults.standard.string(forKey: "SteamCmdPath"),
-           FileManager.default.isExecutableFile(atPath: custom) {
-            steamCmdPath = custom
-            return
-        }
+        let process = Process()
+        let outputPipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: cmdPath)
+        process.arguments = arguments
+        process.standardOutput = outputPipe
+        process.standardError = outputPipe
 
-        // Bundled DepotDownloader — architecture-specific sub-directory
-        if let res = Bundle.main.resourcePath {
-            #if arch(arm64)
-            let arch = "arm64"
-            #else
-            let arch = "x64"
-            #endif
-            let bundled = "\(res)/depotdownloader/\(arch)/DepotDownloader"
-            if FileManager.default.isExecutableFile(atPath: bundled) {
-                steamCmdPath = bundled
-                return
+        // Read pipe concurrently to prevent buffer deadlock
+        var outputData = Data()
+        let readQueue = DispatchQueue(label: "steamcmd.pipe.read")
+        let handle = outputPipe.fileHandleForReading
+        handle.readabilityHandler = { fileHandle in
+            let data = fileHandle.availableData
+            if !data.isEmpty {
+                readQueue.sync { outputData.append(data) }
             }
         }
 
+        do {
+            try process.run()
+        } catch {
+            handle.readabilityHandler = nil
+            return ("Failed to run steamcmd: \(error.localizedDescription)", -1)
+        }
+
+        // Wait with timeout
+        let deadline = DispatchTime.now() + timeout
+        let waitGroup = DispatchGroup()
+        waitGroup.enter()
+        DispatchQueue.global().async {
+            process.waitUntilExit()
+            waitGroup.leave()
+        }
+
+        if waitGroup.wait(timeout: deadline) == .timedOut {
+            process.terminate()
+            handle.readabilityHandler = nil
+            return ("steamcmd timed out after \(Int(timeout))s", -1)
+        }
+
+        handle.readabilityHandler = nil
+        // Read any remaining data
+        let remaining = handle.readDataToEndOfFile()
+        readQueue.sync { outputData.append(remaining) }
+
+        let output = String(data: outputData, encoding: .utf8) ?? ""
+        return (output, process.terminationStatus)
+    }
+
+    /// Automatically try cached session if we have a saved username and steamcmd is installed.
+    private func attemptCachedLogin() {
+        guard isInstalled, !isLoggedIn else { return }
+        if let saved = UserDefaults.standard.string(forKey: Self.lastUsernameKey), !saved.isEmpty {
+            loginWithCachedSession(username: saved)
+        }
+    }
+
+    func detectSteamCmd() {
+        // Check user-configured path first
+        if let customPath = UserDefaults.standard.string(forKey: "SteamCmdPath"),
+           FileManager.default.isExecutableFile(atPath: customPath) {
+            steamCmdPath = customPath
+            return
+        }
+
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
         let searchPaths = [
-            "/opt/homebrew/bin/DepotDownloader",
-            "/usr/local/bin/DepotDownloader",
-            "/opt/homebrew/bin/depotdownloader",
-            "/usr/local/bin/depotdownloader",
+            // Homebrew / system installs
+            "/usr/local/bin/steamcmd",
+            "/opt/homebrew/bin/steamcmd",
+            "/usr/bin/steamcmd",
+            // Steam client / SDK locations
+            "\(homeDir)/Library/Application Support/Steam/steamcmd",
+            "\(homeDir)/Library/Application Support/Steam/steamcmd/steamcmd",
+            "\(homeDir)/Library/Application Support/Steam/steamcmd.sh",
+            // Standalone SteamCMD package (common extract locations)
+            "\(homeDir)/steamcmd/steamcmd.sh",
+            "\(homeDir)/steamcmd/steamcmd",
+            "\(homeDir)/Downloads/steamcmd/steamcmd.sh",
+            "\(homeDir)/Downloads/steamcmd/steamcmd",
+            "/Applications/steamcmd/steamcmd.sh",
+            "/Applications/steamcmd/steamcmd",
+            "\(homeDir)/Projects/SteamSDK/tools/ContentBuilder/builder_osx/steamcmd",
         ]
+
         for path in searchPaths {
-            if FileManager.default.isExecutableFile(atPath: path) {
+            if FileManager.default.fileExists(atPath: path) {
                 steamCmdPath = path
                 return
             }
         }
 
+        // Try `which` as fallback — run on background thread to avoid blocking main thread
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            for name in ["DepotDownloader", "depotdownloader"] {
-                let p = Process(); let pipe = Pipe()
-                p.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-                p.arguments = [name]
-                p.standardOutput = pipe
-                p.standardError = FileHandle.nullDevice
-                try? p.run(); p.waitUntilExit()
-                guard p.terminationStatus == 0 else { continue }
+            let process = Process()
+            let pipe = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+            process.arguments = ["steamcmd"]
+            process.standardOutput = pipe
+            process.standardError = FileHandle.nullDevice
+            try? process.run()
+            process.waitUntilExit()
+
+            if process.terminationStatus == 0 {
                 let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let path = String(data: data, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty {
-                    DispatchQueue.main.async { self?.steamCmdPath = path }
-                    return
+                if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !path.isEmpty {
+                    DispatchQueue.main.async {
+                        self?.steamCmdPath = path
+                    }
                 }
             }
         }
@@ -81,66 +144,53 @@ class SteamCmdService: ObservableObject {
 
     var isInstalled: Bool { steamCmdPath != nil }
 
+    @Published var pathError: String?
+
     func setCustomPath(_ path: String) {
         guard FileManager.default.fileExists(atPath: path) else {
             pathError = "File not found at selected path."
             return
         }
+        // Make executable if needed (e.g. steamcmd.sh from Steam package)
         if !FileManager.default.isExecutableFile(atPath: path) {
-            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: path
+            )
         }
         pathError = nil
         UserDefaults.standard.set(path, forKey: "SteamCmdPath")
         steamCmdPath = path
     }
 
-    // MARK: - Auth
-
-    private func attemptCachedLogin() {
-        guard isInstalled else { return }
-        if let saved = UserDefaults.standard.string(forKey: Self.lastUsernameKey), !saved.isEmpty {
-            loginWithCachedSession(username: saved)
-        }
-    }
-
+    /// Attempt login with username and password. Steam Guard code is optional.
     func login(username: String, password: String, guardCode: String? = nil) {
         guard steamCmdPath != nil else { return }
+
         isLoggingIn = true
         loginError = nil
         steamUsername = username
-        sessionPassword = password
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
+            guard let self = self else { return }
 
-            let tempDir = FileManager.default.temporaryDirectory
-                .appending(path: "depot_auth_\(UUID().uuidString)")
-            try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-            defer { try? FileManager.default.removeItem(at: tempDir) }
+            var args = ["+login", username, password]
+            if let code = guardCode, !code.isEmpty {
+                args = ["+login", username, password, code]
+            }
+            args += ["+quit"]
 
-            let (output, _) = self.runDepotDownloader(
-                arguments: [
-                    "-app", "431960", "-pubfile", "0",
-                    "-username", username, "-password", password,
-                    "-remember-password", "-dir", tempDir.path,
-                ],
-                guardCode: guardCode,
-                timeout: 60
-            )
+            let (output, exitCode) = self.runSteamCmd(arguments: args, timeout: 60)
 
             DispatchQueue.main.async {
                 self.isLoggingIn = false
-                if output.contains("InvalidPassword") || output.contains("Invalid Password") {
-                    self.loginError = "Invalid username or password"
-                } else if output.contains("STEAM GUARD!") && (guardCode?.isEmpty ?? true) {
-                    self.loginError = "Steam Guard code required"
-                } else if output.contains("AccountNotFound") {
-                    self.loginError = "Account not found"
-                } else if output.contains("Done!") || output.contains("Using app branch")
-                            || output.contains("Logging '") {
+                if output.contains("Logged in OK") || (output.contains("OK") && exitCode == 0) {
                     self.isLoggedIn = true
                     self.loginError = nil
                     UserDefaults.standard.set(username, forKey: Self.lastUsernameKey)
+                } else if output.contains("Steam Guard") || output.contains("Two-factor") {
+                    self.loginError = "Steam Guard code required"
+                } else if output.contains("Invalid Password") || output.contains("FAILED") {
+                    self.loginError = "Invalid username or password"
                 } else {
                     self.loginError = "Login failed. Check credentials and try again."
                 }
@@ -148,36 +198,22 @@ class SteamCmdService: ObservableObject {
         }
     }
 
+    /// Try login with cached session (no password needed if previously authenticated).
     func loginWithCachedSession(username: String) {
         guard steamCmdPath != nil else { return }
+
         isLoggingIn = true
         loginError = nil
         steamUsername = username
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
+            guard let self = self else { return }
 
-            let tempDir = FileManager.default.temporaryDirectory
-                .appending(path: "depot_auth_\(UUID().uuidString)")
-            try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-            defer { try? FileManager.default.removeItem(at: tempDir) }
-
-            let (output, _) = self.runDepotDownloader(
-                arguments: [
-                    "-app", "431960", "-pubfile", "0",
-                    "-username", username,
-                    "-remember-password", "-dir", tempDir.path,
-                ],
-                guardCode: nil,
-                timeout: 30
-            )
+            let (output, exitCode) = self.runSteamCmd(arguments: ["+login", username, "+quit"], timeout: 30)
 
             DispatchQueue.main.async {
                 self.isLoggingIn = false
-                if output.contains("Access token was rejected") || output.contains("InvalidPassword") {
-                    self.loginError = "Cached session expired. Please log in with password."
-                } else if output.contains("Done!") || output.contains("Using app branch")
-                            || output.contains("Logging '") {
+                if output.contains("Logged in OK") || (output.contains("OK") && exitCode == 0) {
                     self.isLoggedIn = true
                     UserDefaults.standard.set(username, forKey: Self.lastUsernameKey)
                 } else {
@@ -187,185 +223,153 @@ class SteamCmdService: ObservableObject {
         }
     }
 
-    // MARK: - Download
-
+    /// Download a workshop item by its ID.
     func downloadWorkshopItem(workshopId: String) {
         guard let cmdPath = steamCmdPath, isLoggedIn else { return }
-        downloadProgress[workshopId] = .downloading(status: "Starting download...")
 
-        let tempDir = FileManager.default.temporaryDirectory.appending(path: "depot_\(workshopId)")
+        downloadProgress[workshopId] = .downloading(status: "Starting steamcmd...")
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
-
-            try? FileManager.default.removeItem(at: tempDir)
-            try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-
-            var args = [
-                "-app", "431960", "-pubfile", workshopId,
-                "-username", self.steamUsername,
-                "-remember-password", "-dir", tempDir.path,
-            ]
-            if !self.sessionPassword.isEmpty {
-                args += ["-password", self.sessionPassword]
-            }
+            guard let self = self else { return }
 
             let process = Process()
-            let stdoutPipe = Pipe(); let stderrPipe = Pipe(); let stdinPipe = Pipe()
+            let outputPipe = Pipe()
             process.executableURL = URL(fileURLWithPath: cmdPath)
-            process.arguments = args
-            process.standardOutput = stdoutPipe
-            process.standardError = stderrPipe
-            process.standardInput = stdinPipe
+            process.currentDirectoryURL = URL(fileURLWithPath: cmdPath).deletingLastPathComponent()
+            process.arguments = [
+                "+login", self.steamUsername,
+                "+workshop_download_item", "431960", workshopId, "validate",
+                "+quit"
+            ]
+            process.standardOutput = outputPipe
+            process.standardError = outputPipe
 
+            // Read output in real-time for progress updates
             var fullOutput = ""
+            let handle = outputPipe.fileHandleForReading
+            handle.readabilityHandler = { [weak self] fileHandle in
+                let data = fileHandle.availableData
+                guard !data.isEmpty, let line = String(data: data, encoding: .utf8) else { return }
+                fullOutput += line
 
-            stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] fh in
-                let data = fh.availableData
-                guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
-                fullOutput += chunk
-                if let status = self?.parseProgress(chunk) {
-                    DispatchQueue.main.async { self?.downloadProgress[workshopId] = .downloading(status: status) }
+                let status = self?.parseProgress(line) ?? nil
+                if let status = status {
+                    DispatchQueue.main.async {
+                        self?.downloadProgress[workshopId] = .downloading(status: status)
+                    }
                 }
-            }
-
-            stderrPipe.fileHandleForReading.readabilityHandler = { fh in
-                let data = fh.availableData
-                guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
-                fullOutput += chunk
             }
 
             do {
                 try process.run()
                 process.waitUntilExit()
             } catch {
-                stdoutPipe.fileHandleForReading.readabilityHandler = nil
-                stderrPipe.fileHandleForReading.readabilityHandler = nil
+                handle.readabilityHandler = nil
                 DispatchQueue.main.async {
-                    self.downloadProgress[workshopId] = .failed("Failed to start: \(error.localizedDescription)")
+                    self.downloadProgress[workshopId] = .failed("steamcmd failed to run: \(error.localizedDescription)")
                 }
                 return
             }
 
-            stdoutPipe.fileHandleForReading.readabilityHandler = nil
-            stderrPipe.fileHandleForReading.readabilityHandler = nil
-            fullOutput += String(data: stdoutPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            fullOutput += String(data: stderrPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            handle.readabilityHandler = nil
+            // Read any remaining data
+            let remaining = handle.readDataToEndOfFile()
+            if let str = String(data: remaining, encoding: .utf8) { fullOutput += str }
 
-            print("DepotDownloader [\(workshopId)] exit=\(process.terminationStatus)\n\(fullOutput)")
+            let exitCode = process.terminationStatus
+            print("steamcmd download [\(workshopId)] exit=\(exitCode)\n\(fullOutput)")
+
+            // Find downloaded content
+            let steamAppsDir = self.findSteamAppsDir(cmdPath: cmdPath)
+            let sourcePath = steamAppsDir?
+                .appending(path: "workshop/content/431960/\(workshopId)")
 
             DispatchQueue.main.async {
-                if fullOutput.contains("Total downloaded") || fullOutput.contains("100.00%") {
-                    self.downloadProgress[workshopId] = .downloading(status: "Copying to library...")
+                self.downloadProgress[workshopId] = .downloading(status: "Copying to library...")
+
+                if let sourceDir = sourcePath {
                     let fm = FileManager.default
-                    let dest = fm.wallpapersDirectory.appending(path: workshopId)
-                    do {
-                        if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
-                        // Copy files excluding .DepotDownloader staging folder
-                        try fm.createDirectory(at: dest, withIntermediateDirectories: true)
-                        let contents = try fm.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)
-                        for item in contents where item.lastPathComponent != ".DepotDownloader" {
-                            try fm.copyItem(at: item, to: dest.appending(path: item.lastPathComponent))
+                    if fm.fileExists(atPath: sourceDir.path) {
+                        let dest = fm.wallpapersDirectory.appending(path: workshopId)
+                        if !fm.fileExists(atPath: dest.path) {
+                            do {
+                                try fm.copyItem(at: sourceDir, to: dest)
+                            } catch {
+                                self.downloadProgress[workshopId] = .failed("Copy failed: \(error.localizedDescription)")
+                                return
+                            }
                         }
                         self.downloadProgress[workshopId] = .completed
-                    } catch {
-                        self.downloadProgress[workshopId] = .failed("Copy failed: \(error.localizedDescription)")
+                        return
                     }
-                } else {
+                }
+
+                if fullOutput.contains("ERROR") || fullOutput.contains("FAILED") {
                     let errorLine = fullOutput.components(separatedBy: "\n")
-                        .first { $0.lowercased().contains("error") || $0.contains("FAILED") }
-                        ?? "Download failed"
+                        .first(where: { $0.contains("ERROR") || $0.contains("FAILED") })
+                        ?? "Unknown error"
                     self.downloadProgress[workshopId] = .failed(errorLine)
+                } else if exitCode != 0 {
+                    self.downloadProgress[workshopId] = .failed("Exit code \(exitCode)")
+                } else {
+                    self.downloadProgress[workshopId] = .failed("Files not found at expected path")
                 }
-                try? FileManager.default.removeItem(at: tempDir)
             }
         }
     }
 
-    // MARK: - Private helpers
-
-    private func runDepotDownloader(
-        arguments: [String],
-        guardCode: String?,
-        timeout: TimeInterval
-    ) -> (output: String, exitCode: Int32) {
-        guard let cmdPath = steamCmdPath else { return ("", -1) }
-
-        let process = Process()
-        let stdoutPipe = Pipe(); let stderrPipe = Pipe(); let stdinPipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: cmdPath)
-        process.arguments = arguments
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-        process.standardInput = stdinPipe
-
-        var combinedOutput = ""
-        var guardCodeWritten = false
-        let readQueue = DispatchQueue(label: "depot.pipe.read")
-
-        stdoutPipe.fileHandleForReading.readabilityHandler = { fh in
-            let data = fh.availableData
-            guard !data.isEmpty else { return }
-            if let s = String(data: data, encoding: .utf8) { readQueue.sync { combinedOutput += s } }
-        }
-
-        // Steam Guard prompts come from stderr
-        stderrPipe.fileHandleForReading.readabilityHandler = { fh in
-            let data = fh.availableData
-            guard !data.isEmpty else { return }
-            if let chunk = String(data: data, encoding: .utf8) {
-                readQueue.sync { combinedOutput += chunk }
-                let needsGuard = chunk.contains("STEAM GUARD!") || chunk.contains("2 factor auth")
-                    || chunk.contains("authentication code")
-                if needsGuard && !guardCodeWritten {
-                    if let code = guardCode, !code.isEmpty {
-                        guardCodeWritten = true
-                        stdinPipe.fileHandleForWriting.write(Data((code + "\n").utf8))
-                    } else {
-                        // No code available — kill immediately instead of waiting for timeout
-                        process.terminate()
-                    }
-                }
-            }
-        }
-
-        do { try process.run() } catch {
-            stdoutPipe.fileHandleForReading.readabilityHandler = nil
-            stderrPipe.fileHandleForReading.readabilityHandler = nil
-            return ("Failed to run DepotDownloader: \(error.localizedDescription)", -1)
-        }
-
-        let wg = DispatchGroup(); wg.enter()
-        DispatchQueue.global().async { process.waitUntilExit(); wg.leave() }
-        if wg.wait(timeout: .now() + timeout) == .timedOut { process.terminate() }
-
-        stdoutPipe.fileHandleForReading.readabilityHandler = nil
-        stderrPipe.fileHandleForReading.readabilityHandler = nil
-        let remainOut = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let remainErr = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-        readQueue.sync {
-            combinedOutput += String(data: remainOut, encoding: .utf8) ?? ""
-            combinedOutput += String(data: remainErr, encoding: .utf8) ?? ""
-        }
-        return (readQueue.sync { combinedOutput }, process.terminationStatus)
-    }
-
+    /// Parse steamcmd output lines into human-readable progress.
     private func parseProgress(_ output: String) -> String? {
-        for line in output.components(separatedBy: "\n") {
-            let t = line.trimmingCharacters(in: .whitespaces)
-            // DepotDownloader stdout format: "  5.23% path/to/file"
-            if let match = t.range(of: #"^(\d+\.\d+)%"#, options: .regularExpression) {
-                let pctStr = String(t[match]).replacingOccurrences(of: "%", with: "")
-                if let pct = Double(pctStr) {
-                    return String(format: "Downloading... %.0f%%", min(pct, 100))
-                }
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if trimmed.contains("Logging in") || trimmed.contains("Logged in") {
+            return "Authenticating..."
+        }
+        if trimmed.contains("Downloading item") || trimmed.contains("workshop_download_item") {
+            return "Requesting download..."
+        }
+        if trimmed.contains("Downloading") || trimmed.contains("downloading") {
+            // Try to extract percentage like "Update state (0x61) downloading, progress: 45.23"
+            if let range = trimmed.range(of: "progress:\\s*([\\d.]+)", options: .regularExpression),
+               let pct = Double(trimmed[range].replacingOccurrences(of: "progress:", with: "").trimmingCharacters(in: .whitespaces)) {
+                return String(format: "Downloading... %.0f%%", min(pct, 100))
             }
-            if t.contains("Total downloaded") { return "Download complete, importing..." }
-            if t.contains("Connecting to Steam") { return "Connecting..." }
-            if t.contains("Logging '") { return "Authenticating..." }
-            if t.contains("Done!") { return "Preparing download..." }
-            if t.contains("Processing depot") || t.contains("Downloading depot") { return "Fetching manifest..." }
-            if t.contains("Pre-allocating") { return "Allocating space..." }
+            return "Downloading..."
+        }
+        if trimmed.contains("Validating") || trimmed.contains("validating") {
+            return "Validating..."
+        }
+        if trimmed.contains("Success") {
+            return "Download complete, importing..."
+        }
+        if trimmed.contains("Update state") {
+            // Generic state update
+            if trimmed.contains("0x5") { return "Validating..." }
+            if trimmed.contains("0x61") { return "Downloading..." }
+            if trimmed.contains("0x101") { return "Committing..." }
+        }
+        return nil
+    }
+
+    private func findSteamAppsDir(cmdPath: String) -> URL? {
+        // steamcmd typically stores downloads relative to its install location
+        let cmdURL = URL(fileURLWithPath: cmdPath)
+
+        // Homebrew: /opt/homebrew/Cellar/steamcmd/...  -> steamapps at ~/Library/Application Support/Steam
+        // Manual: wherever steamcmd is -> steamapps in same dir
+        let possiblePaths = [
+            cmdURL.deletingLastPathComponent().appending(path: "steamapps"),
+            FileManager.default.homeDirectoryForCurrentUser
+                .appending(path: "Library/Application Support/Steam/steamapps"),
+            FileManager.default.homeDirectoryForCurrentUser
+                .appending(path: "Steam/steamapps"),
+        ]
+
+        for path in possiblePaths {
+            if FileManager.default.fileExists(atPath: path.path) {
+                return path
+            }
         }
         return nil
     }

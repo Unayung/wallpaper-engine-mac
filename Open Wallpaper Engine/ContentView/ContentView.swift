@@ -150,7 +150,6 @@ struct ContentView: View {
                 .frame(width: 600, height: 300)
         }
         .frame(minWidth: 1000, minHeight: 640, idealHeight: 800)
-        .environment(\.locale, globalSettingsViewModel.locale)
     }
 }
 

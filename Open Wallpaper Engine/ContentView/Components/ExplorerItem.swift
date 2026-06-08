@@ -35,10 +35,10 @@ struct ExplorerItem: SubviewOfContentView {
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, minHeight: 30)
                 .padding(4)
-                .background(Color(white: 0, opacity: viewModel.imageScaleIndex == index ? 0.6 : 0.45))
+                .background(Color(white: 0, opacity: viewModel.imageScaleIndex == index ? 0.4 : 0.2))
                 .font(.footnote)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(Color.white)
+                .foregroundStyle(Color(white: viewModel.imageScaleIndex == index ? 0.9 : 0.7))
             
 //            Spacer()
 //                .onHover { onHover in

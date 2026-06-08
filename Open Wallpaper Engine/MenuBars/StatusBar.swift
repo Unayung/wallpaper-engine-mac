@@ -1,3 +1,10 @@
+//
+//  Status.swift
+//  Open Wallpaper Engine
+//
+//  Created by Haren on 2023/8/8.
+//
+
 import Cocoa
 
 extension AppDelegate {
@@ -22,6 +29,7 @@ extension AppDelegate {
     }
 
     @objc func browseWorkshop() {
+        // Change tab selection to `Workshop`
         self.contentViewModel.topTabBarSelection = 1
         openMainWindow()
     }
@@ -56,14 +64,12 @@ extension AppDelegate {
     }
 
     func setStatusMenu() {
+        // Recent Wallpapers Submenu
         let recentWallpapersMenuItem = NSMenuItem(title: String(localized: "Recent Wallpapers"), action: nil, keyEquivalent: "")
         recentWallpapersMenuItem.submenu = buildRecentWallpapersMenu()
 
         let menu = NSMenu()
         menu.delegate = self
-        let isMuted = wallpaperViewModel.playVolume == 0
-        let isPaused = wallpaperViewModel.playRate == 0
-
         menu.items = [
             .init(title: String(localized: "Show Open Wallpaper Engine"),
                   systemImage: "photo",
@@ -93,13 +99,15 @@ extension AppDelegate {
 
             .separator(),
 
-            isMuted
-                ? .init(title: String(localized: "Unmute"), systemImage: "speaker.fill", action: #selector(AppDelegate.shared.unmute), keyEquivalent: "m")
-                : .init(title: String(localized: "Mute"), systemImage: "speaker.slash.fill", action: #selector(AppDelegate.shared.mute), keyEquivalent: "m"),
+            .init(title: String(localized: "Mute"),
+                  systemImage: "speaker.slash.fill",
+                  action: #selector(AppDelegate.shared.mute),
+                  keyEquivalent: "m"),
 
-            isPaused
-                ? .init(title: String(localized: "Resume"), systemImage: "play.fill", action: #selector(resume), keyEquivalent: "p")
-                : .init(title: String(localized: "Pause"), systemImage: "pause.fill", action: #selector(pause), keyEquivalent: "p"),
+            .init(title: String(localized: "Pause"),
+                  systemImage: "pause.fill",
+                  action: #selector(pause),
+                  keyEquivalent: "p"),
 
             .init(title: String(localized: "Quit"),
                   systemImage: "power",
@@ -118,40 +126,6 @@ extension AppDelegate {
                 button.image = NSImage(systemSymbolName: "play.desktopcomputer", accessibilityDescription: nil)
             }
         }
-
-        bindMenuLabels()
-    }
-
-    // Keep Mute/Unmute and Pause/Resume labels in sync with ViewModel state.
-    // The ViewModel only publishes new values; this layer decides what to show.
-    private func bindMenuLabels() {
-        wallpaperViewModel.$playVolume
-            .removeDuplicates { ($0 == 0) == ($1 == 0) } // only react to muted ↔ unmuted transitions
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] volume in
-                guard let menu = self?.statusItem.menu else { return }
-                let isMuted = volume == 0
-                if let idx = menu.items.firstIndex(where: { $0.title == String(localized: "Mute") || $0.title == String(localized: "Unmute") }) {
-                    menu.items[idx] = isMuted
-                        ? .init(title: String(localized: "Unmute"), systemImage: "speaker.fill",       action: #selector(AppDelegate.shared.unmute), keyEquivalent: "m")
-                        : .init(title: String(localized: "Mute"),   systemImage: "speaker.slash.fill", action: #selector(AppDelegate.shared.mute),   keyEquivalent: "m")
-                }
-            }
-            .store(in: &cancellables)
-
-        wallpaperViewModel.$playRate
-            .removeDuplicates { ($0 == 0) == ($1 == 0) }
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] rate in
-                guard let menu = self?.statusItem.menu else { return }
-                let isPaused = rate == 0
-                if let idx = menu.items.firstIndex(where: { $0.title == "Pause" || $0.title == "Resume" }) {
-                    menu.items[idx] = isPaused
-                        ? .init(title: "Resume", systemImage: "play.fill",  action: #selector(AppDelegate.shared.resume), keyEquivalent: "p")
-                        : .init(title: "Pause",  systemImage: "pause.fill", action: #selector(AppDelegate.shared.pause),  keyEquivalent: "p")
-                }
-            }
-            .store(in: &cancellables)
     }
 }
 
@@ -159,6 +133,7 @@ extension AppDelegate {
 
 extension AppDelegate: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
+        // Update the Recent Wallpapers submenu each time the status bar menu opens
         if let recentItem = menu.items.first(where: { $0.title == String(localized: "Recent Wallpapers") }) {
             recentItem.submenu = buildRecentWallpapersMenu()
         }

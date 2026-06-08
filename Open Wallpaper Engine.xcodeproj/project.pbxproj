@@ -57,7 +57,6 @@
 		AA1B2C3D4E5F600200ABCD05 /* SpriteKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA1B2C3D4E5F600100ABCD05 /* SpriteKit.framework */; };
 		BB0000000000000000000003 /* ObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000002 /* ObjCExceptionCatcher.m */; };
 		CC0000000000000000000001 /* WallpaperDirectory.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000002 /* WallpaperDirectory.swift */; };
-		DD0000000000000000000001 /* WallpaperWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000002 /* WallpaperWindowManager.swift */; };
 		CC0000000000000000000003 /* ZipImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000004 /* ZipImporter.swift */; };
 		CC0000000000000000000005 /* SteamCmdService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000006 /* SteamCmdService.swift */; };
 		CC0000000000000000000007 /* WorkshopAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000008 /* WorkshopAPIService.swift */; };
@@ -129,7 +128,6 @@
 		BB0000000000000000000001 /* ObjCExceptionCatcher.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ObjCExceptionCatcher.h; sourceTree = "<group>"; };
 		BB0000000000000000000002 /* ObjCExceptionCatcher.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ObjCExceptionCatcher.m; sourceTree = "<group>"; };
 		CC0000000000000000000002 /* WallpaperDirectory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperDirectory.swift; sourceTree = "<group>"; };
-		DD0000000000000000000002 /* WallpaperWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperWindowManager.swift; sourceTree = "<group>"; };
 		CC0000000000000000000004 /* ZipImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZipImporter.swift; sourceTree = "<group>"; };
 		CC0000000000000000000006 /* SteamCmdService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SteamCmdService.swift; sourceTree = "<group>"; };
 		CC0000000000000000000008 /* WorkshopAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkshopAPIService.swift; sourceTree = "<group>"; };
@@ -220,7 +218,6 @@
 				BB0000000000000000000001 /* ObjCExceptionCatcher.h */,
 				BB0000000000000000000002 /* ObjCExceptionCatcher.m */,
 				CC0000000000000000000002 /* WallpaperDirectory.swift */,
-				DD0000000000000000000002 /* WallpaperWindowManager.swift */,
 				CC0000000000000000000004 /* ZipImporter.swift */,
 				CC0000000000000000000006 /* SteamCmdService.swift */,
 				CC0000000000000000000008 /* WorkshopAPIService.swift */,
@@ -470,7 +467,6 @@
 				AA1B2C3D4E5F600200ABCD04 /* SceneWallpaperViewModel.swift in Sources */,
 				BB0000000000000000000003 /* ObjCExceptionCatcher.m in Sources */,
 				CC0000000000000000000001 /* WallpaperDirectory.swift in Sources */,
-				DD0000000000000000000001 /* WallpaperWindowManager.swift in Sources */,
 				CC0000000000000000000003 /* ZipImporter.swift in Sources */,
 				CC0000000000000000000005 /* SteamCmdService.swift in Sources */,
 				CC0000000000000000000007 /* WorkshopAPIService.swift in Sources */,

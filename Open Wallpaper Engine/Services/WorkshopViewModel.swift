@@ -8,7 +8,6 @@ class WorkshopViewModel: ObservableObject {
     @Published var sortOrder: WorkshopSortOrder = .trending
     @Published var isLoading = false
     @Published var errorMessage: String?
-    @Published var needsAPIKey = false
     @Published var currentPage = 1
     @Published var selectedTags: [String] = ["Everyone"]
 
@@ -45,7 +44,6 @@ class WorkshopViewModel: ObservableObject {
     func search() async {
         isLoading = true
         errorMessage = nil
-        needsAPIKey = false
 
         do {
             let results = try await api.searchItems(
@@ -55,10 +53,6 @@ class WorkshopViewModel: ObservableObject {
                 page: currentPage
             )
             items = results
-        } catch WorkshopAPIError.noAPIKey {
-            needsAPIKey = true
-        } catch WorkshopAPIError.invalidAPIKey {
-            needsAPIKey = true
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -79,10 +73,6 @@ class WorkshopViewModel: ObservableObject {
                 page: currentPage
             )
             items.append(contentsOf: results)
-        } catch WorkshopAPIError.noAPIKey {
-            needsAPIKey = true
-        } catch WorkshopAPIError.invalidAPIKey {
-            needsAPIKey = true
         } catch {
             errorMessage = error.localizedDescription
         }

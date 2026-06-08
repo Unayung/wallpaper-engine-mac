@@ -1,3 +1,10 @@
+//
+//  WebWallpaperViewModel.swift
+//  Open Wallpaper Engine
+//
+//  Created by Toby on 2023/8/28.
+//
+
 import WebKit
 import SwiftUI
 
@@ -12,19 +19,15 @@ class WebWallpaperViewModel: NSObject, ObservableObject, WKNavigationDelegate {
         currentWallpaper.wallpaperDirectory
     }
     
-    weak var webView: WKWebView?
-
     init(wallpaper: WEWallpaper) {
         self.currentWallpaper = wallpaper
         super.init()
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemWillSleep(_:)), name: NSWorkspace.screensDidSleepNotification, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemDidWake(_:)), name: NSWorkspace.didWakeNotification, object: nil)
-        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(spaceDidChange(_:)), name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
-        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(spaceDidChange(_:)), name: NSWorkspace.didActivateApplicationNotification, object: nil)
     }
-
+    
     deinit {
-        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        NotificationCenter.default.removeObserver(self)
     }
     
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
@@ -36,19 +39,31 @@ class WebWallpaperViewModel: NSObject, ObservableObject, WKNavigationDelegate {
         let javascriptStyle = "var css = '*{-webkit-touch-callout:none;-webkit-user-select:none}'; var head = document.head || document.getElementsByTagName('head')[0]; var style = document.createElement('style'); style.type = 'text/css'; style.appendChild(document.createTextNode(css)); head.appendChild(style);"
         webView.evaluateJavaScript(javascriptStyle, completionHandler: nil)
         
+        if AppDelegate.shared.globalSettingsViewModel.settings.adjustMenuBarTint {
+            webView.takeSnapshot(with: nil) { [weak self] nsImage, error in
+                guard let self = self else { return }
+                if let data = nsImage?.tiffRepresentation {
+                    do {
+                        let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "staticWP_\(self.currentWallpaper.wallpaperDirectory.hashValue).tiff")
+                        try data.write(to: url, options: .atomic)
+                        try NSWorkspace.shared.setDesktopImageURL(url, for: .main!)
+                    } catch {
+                        print(error)
+                    }
+                }
+            }
+        }
     }
     
-    @objc func systemWillSleep(_ notification: Notification) {}
-
-    @objc func systemDidWake(_ notification: Notification) {
-        webView?.reload()
+    @objc func systemWillSleep(_ notification: Notification) {
+        // Handle going to sleep
+        print("System is going to sleep")
+        // Update your SwiftUI state here if needed
     }
-
-    @objc func spaceDidChange(_ notification: Notification) {
-        // Resume any paused HTML5 video/audio after Mission Control transition
-        webView?.evaluateJavaScript(
-            "document.querySelectorAll('video,audio').forEach(m => { if(m.paused) m.play(); })",
-            completionHandler: nil
-        )
+        
+    @objc func systemDidWake(_ notification: Notification) {
+        // Handle waking up
+        print("System woke up from sleep")
+        // Update your SwiftUI state here if needed
     }
 }

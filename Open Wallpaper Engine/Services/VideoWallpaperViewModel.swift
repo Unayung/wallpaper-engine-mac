@@ -1,3 +1,10 @@
+//
+//  VideoWallpaperViewModel.swift
+//  Open Wallpaper Engine
+//
+//  Created by Haren on 2023/8/14.
+//
+
 import AVKit
 import SwiftUI
 import Combine
@@ -5,6 +12,7 @@ import Combine
 class VideoWallpaperViewModel: ObservableObject {
     var currentWallpaper: WEWallpaper {
         didSet {
+            // Remove observer for old item before replacing
             if let oldItem = self.player.currentItem {
                 NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: oldItem)
             }
@@ -35,13 +43,11 @@ class VideoWallpaperViewModel: ObservableObject {
     init(wallpaper currentWallpaper: WEWallpaper) {
         self.currentWallpaper = currentWallpaper
         self.player = AVPlayer(url: currentWallpaper.wallpaperDirectory.appending(path: currentWallpaper.project.file))
-        self.player.automaticallyWaitsToMinimizeStalling = false
         NotificationCenter.default.addObserver(self, selector: #selector(playerDidFinishPlaying(_:)), name: .AVPlayerItemDidPlayToEndTime, object: self.player.currentItem)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemWillSleep(_:)), name: NSWorkspace.screensDidSleepNotification, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemDidWake(_:)), name: NSWorkspace.didWakeNotification, object: nil)
-        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(spaceDidChange(_:)), name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
-        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(spaceDidChange(_:)), name: NSWorkspace.didActivateApplicationNotification, object: nil)
 
+        // Directly observe playRate/playVolume changes from the shared WallpaperViewModel
         let wvm = AppDelegate.shared.wallpaperViewModel
         wvm.$playRate
             .receive(on: DispatchQueue.main)
@@ -55,20 +61,6 @@ class VideoWallpaperViewModel: ObservableObject {
                 self?.playVolume = volume
             }
             .store(in: &cancellables)
-
-        player.publisher(for: \.timeControlStatus)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] status in
-                guard let self, status == .paused, self.playRate > 0 else { return }
-                for delay in [0.2, 0.6, 1.2] {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                        if self.playRate > 0 && self.player.timeControlStatus == .paused {
-                            self.player.rate = self.playRate
-                        }
-                    }
-                }
-            }
-            .store(in: &cancellables)
     }
 
     deinit {
@@ -77,11 +69,13 @@ class VideoWallpaperViewModel: ObservableObject {
     }
 
     @objc private func playerDidFinishPlaying(_ notification: Notification) {
+        // Replay video
         self.player.seek(to: CMTime.zero)
         self.player.rate = self.playRate
     }
 
     @objc private func playerDidStopPlaying(_ notification: Notification) {
+        // Resume playback
         self.player.rate = self.playRate
     }
 
@@ -90,10 +84,6 @@ class VideoWallpaperViewModel: ObservableObject {
     }
 
     @objc func systemDidWake(_ notification: Notification) {
-        self.player.rate = self.playRate
-    }
-
-    @objc func spaceDidChange(_ notification: Notification) {
         self.player.rate = self.playRate
     }
 }
