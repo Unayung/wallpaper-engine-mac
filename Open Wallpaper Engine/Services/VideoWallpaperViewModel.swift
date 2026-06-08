@@ -1,10 +1,3 @@
-//
-//  VideoWallpaperViewModel.swift
-//  Open Wallpaper Engine
-//
-//  Created by Haren on 2023/8/14.
-//
-
 import AVKit
 import SwiftUI
 import Combine
@@ -12,7 +5,6 @@ import Combine
 class VideoWallpaperViewModel: ObservableObject {
     var currentWallpaper: WEWallpaper {
         didSet {
-            // Remove observer for old item before replacing
             if let oldItem = self.player.currentItem {
                 NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: oldItem)
             }
@@ -39,15 +31,19 @@ class VideoWallpaperViewModel: ObservableObject {
 
     var player = AVPlayer()
     private var cancellables = Set<AnyCancellable>()
+    // Retry schedule (seconds) for unexpected pauses (e.g. Stage Manager animation)
+    private static let resumeDelays: [Double] = [0.2, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
 
     init(wallpaper currentWallpaper: WEWallpaper) {
         self.currentWallpaper = currentWallpaper
         self.player = AVPlayer(url: currentWallpaper.wallpaperDirectory.appending(path: currentWallpaper.project.file))
+        self.player.automaticallyWaitsToMinimizeStalling = false
         NotificationCenter.default.addObserver(self, selector: #selector(playerDidFinishPlaying(_:)), name: .AVPlayerItemDidPlayToEndTime, object: self.player.currentItem)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemWillSleep(_:)), name: NSWorkspace.screensDidSleepNotification, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemDidWake(_:)), name: NSWorkspace.didWakeNotification, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(spaceDidChange(_:)), name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(spaceDidChange(_:)), name: NSWorkspace.didActivateApplicationNotification, object: nil)
 
-        // Directly observe playRate/playVolume changes from the shared WallpaperViewModel
         let wvm = AppDelegate.shared.wallpaperViewModel
         wvm.$playRate
             .receive(on: DispatchQueue.main)
@@ -61,6 +57,29 @@ class VideoWallpaperViewModel: ObservableObject {
                 self?.playVolume = volume
             }
             .store(in: &cancellables)
+
+        player.publisher(for: \.timeControlStatus)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                guard let self, status == .paused, self.playRate > 0 else { return }
+                self.scheduleResume(attempt: 0)
+            }
+            .store(in: &cancellables)
+    }
+
+    // Keeps retrying until the player is actually playing or all delays are exhausted.
+    // Each successful re-kick resets the schedule if the system pauses again (timeControlStatus fires).
+    private func scheduleResume(attempt: Int) {
+        let delays = VideoWallpaperViewModel.resumeDelays
+        guard attempt < delays.count, playRate > 0 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delays[attempt]) { [weak self] in
+            guard let self, self.playRate > 0 else { return }
+            if self.player.timeControlStatus == .paused {
+                self.player.rate = self.playRate
+                self.scheduleResume(attempt: attempt + 1)
+            }
+            // If playing, stop — timeControlStatus publisher will re-trigger if paused again
+        }
     }
 
     deinit {
@@ -69,13 +88,11 @@ class VideoWallpaperViewModel: ObservableObject {
     }
 
     @objc private func playerDidFinishPlaying(_ notification: Notification) {
-        // Replay video
         self.player.seek(to: CMTime.zero)
         self.player.rate = self.playRate
     }
 
     @objc private func playerDidStopPlaying(_ notification: Notification) {
-        // Resume playback
         self.player.rate = self.playRate
     }
 
@@ -84,6 +101,10 @@ class VideoWallpaperViewModel: ObservableObject {
     }
 
     @objc func systemDidWake(_ notification: Notification) {
+        self.player.rate = self.playRate
+    }
+
+    @objc func spaceDidChange(_ notification: Notification) {
         self.player.rate = self.playRate
     }
 }

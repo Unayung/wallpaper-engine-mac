@@ -41,7 +41,7 @@ enum GSAppearance: String, CaseIterable, Identifiable, Codable {
 
 enum GSLocalization: String, CaseIterable, Identifiable, Codable {
     var id: Self { self }
-    case en_US, zh_CN, followSystem
+    case en_US, zh_CN, zh_TW, ja, followSystem
 }
 
 enum GSVideoFramework: String, CaseIterable, Identifiable, Codable {
@@ -117,6 +117,16 @@ class GlobalSettingsViewModel: ObservableObject {
     
     @Published var isFirstLaunch = UserDefaults.standard.value(forKey: "IsFirstLaunch") as? Bool ?? true
     
+    var locale: Locale {
+        switch settings.language {
+        case .en_US:        return Locale(identifier: "en")
+        case .zh_CN:        return Locale(identifier: "zh-Hans")
+        case .zh_TW:        return Locale(identifier: "zh-Hant")
+        case .ja:           return Locale(identifier: "ja")
+        case .followSystem: return .current
+        }
+    }
+
     var didFinishLaunchingNotificationCancellable: Cancellable?
     var didActivateApplicationNotificationCancellable: Cancellable?
     var didCurrentWallpaperChangeCancellable: Cancellable?
@@ -188,24 +198,9 @@ class GlobalSettingsViewModel: ObservableObject {
         }
     }
     
-    func didChangeAdjustMenuBarTint(_ newValue: Bool) {
-        if newValue != true {
-            if let wallpaper = UserDefaults.standard.url(forKey: "OSWallpaper") {
-                try? NSWorkspace.shared.setDesktopImageURL(wallpaper, for: .main!)
-            }
-        } else {
-            do {
-                let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appending(path: "staticWP_\(AppDelegate.shared.wallpaperViewModel.currentWallpaper.wallpaperDirectory.hashValue).tiff")
-                try NSWorkspace.shared.setDesktopImageURL(url, for: .main!)
-            } catch {
-                print(error)
-            }
-        }
-    }
-    
-    func didCurrentWallpaperChange(_ newValue: WEWallpaper) {
-        AppDelegate.shared.setPlacehoderWallpaper(with: newValue)
-    }
+    func didChangeAdjustMenuBarTint(_ newValue: Bool) {}
+
+    func didCurrentWallpaperChange(_ newValue: WEWallpaper) {}
     
     func reset() {
         settings = (try? JSONDecoder()

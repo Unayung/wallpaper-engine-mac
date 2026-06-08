@@ -1,10 +1,3 @@
-//
-//  WallpaperView.swift
-//  Open Wallpaper Engine
-//
-//  Created by Haren on 2023/6/5.
-//
-
 import Cocoa
 import SwiftUI
 

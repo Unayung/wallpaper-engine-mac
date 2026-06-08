@@ -21,7 +21,7 @@ struct WorkshopView: SubviewOfContentView {
     }
 }
 
-// MARK: - steamcmd Not Installed
+// MARK: - DepotDownloader Not Installed
 
 private struct SteamCmdNotInstalledView: View {
     @ObservedObject var steamCmd: SteamCmdService
@@ -33,16 +33,16 @@ private struct SteamCmdNotInstalledView: View {
                 .font(.system(size: 40))
                 .foregroundStyle(.secondary)
 
-            Text("steamcmd Not Found")
+            Text("DepotDownloader Not Found")
                 .font(.title2)
                 .bold()
 
-            Text("Steam Workshop requires steamcmd to download wallpapers.\nInstall it with Homebrew:")
+            Text("Steam Workshop requires DepotDownloader to download wallpapers.\nInstall it with Homebrew:")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
 
             HStack {
-                Text("brew install steamcmd")
+                Text("brew install depotdownloader")
                     .font(.system(.body, design: .monospaced))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -51,7 +51,7 @@ private struct SteamCmdNotInstalledView: View {
 
                 Button {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString("brew install steamcmd", forType: .string)
+                    NSPasteboard.general.setString("brew install depotdownloader", forType: .string)
                     isCopied = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) { isCopied = false }
                 } label: {
@@ -62,7 +62,7 @@ private struct SteamCmdNotInstalledView: View {
 
             Divider().frame(width: 200)
 
-            Text("Or locate an existing steamcmd binary:")
+            Text("Or locate an existing DepotDownloader binary:")
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
@@ -71,7 +71,7 @@ private struct SteamCmdNotInstalledView: View {
                 panel.canChooseFiles = true
                 panel.canChooseDirectories = false
                 panel.allowsMultipleSelection = false
-                panel.message = "Select the steamcmd executable"
+                panel.message = "Select the DepotDownloader executable"
                 if panel.runModal() == .OK, let url = panel.url {
                     steamCmd.setCustomPath(url.path)
                 }
@@ -102,6 +102,7 @@ private struct SteamLoginView: View {
     @State private var password = ""
     @State private var guardCode = ""
     @State private var showGuardCode = false
+    @State private var hasAPIKey = !WorkshopAPIService.loadAPIKey().isEmpty
 
     var body: some View {
         VStack(spacing: 16) {
@@ -126,6 +127,14 @@ private struct SteamLoginView: View {
                 SecureField("Password", text: $password)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 260)
+
+                VStack(spacing: 4) {
+                    Text("A Steam Web API key is required to browse and download wallpapers.")
+                        .font(.caption)
+                    APIKeyInputView(buttonTitle: "Save", onSave: {
+                        hasAPIKey = !WorkshopAPIService.loadAPIKey().isEmpty
+                    })
+                }
 
                 if showGuardCode {
                     TextField("Steam Guard Code", text: $guardCode)
@@ -155,14 +164,14 @@ private struct SteamLoginView: View {
                         )
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(username.isEmpty || password.isEmpty || steamCmd.isLoggingIn)
+                    .disabled(username.isEmpty || password.isEmpty || !hasAPIKey || steamCmd.isLoggingIn)
 
                     if !username.isEmpty {
                         Button("Use Cached Session") {
                             steamCmd.loginWithCachedSession(username: username)
                         }
                         .buttonStyle(.bordered)
-                        .disabled(steamCmd.isLoggingIn)
+                        .disabled(!hasAPIKey || steamCmd.isLoggingIn)
                     }
                 }
 
@@ -173,15 +182,6 @@ private struct SteamLoginView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-            }
-
-            // API Key section
-            VStack(spacing: 6) {
-                Divider().padding(.vertical, 8)
-                Text("You'll also need a Steam Web API key to browse the Workshop.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                APIKeyInputView {}
             }
         }
         .padding(40)
@@ -250,6 +250,12 @@ private struct WorkshopBrowserView: View {
                 Spacer()
                 ProgressView("Searching Workshop...")
                 Spacer()
+            } else if viewModel.needsAPIKey {
+                Spacer()
+                APIKeySetupView {
+                    Task { await viewModel.search() }
+                }
+                Spacer()
             } else if let error = viewModel.errorMessage, viewModel.items.isEmpty {
                 Spacer()
                 VStack(spacing: 12) {
@@ -259,10 +265,6 @@ private struct WorkshopBrowserView: View {
                     Text(error)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
-
-                    APIKeyInputView {
-                        Task { await viewModel.search() }
-                    }
                 }
                 Spacer()
             } else if viewModel.items.isEmpty {
@@ -277,16 +279,6 @@ private struct WorkshopBrowserView: View {
                     Text("Find wallpapers by name, tag, or browse trending content.")
                         .font(.callout)
                         .foregroundStyle(.tertiary)
-
-                    if WorkshopAPIService.loadAPIKey().isEmpty {
-                        Divider().frame(width: 300).padding(.vertical, 4)
-                        Text("A Steam Web API key is required to browse.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                        APIKeyInputView {
-                            Task { await viewModel.search() }
-                        }
-                    }
                 }
                 Spacer()
             } else {
@@ -458,10 +450,40 @@ private struct WorkshopItemCard: View {
     }
 }
 
+// MARK: - API Key Setup (first-time onboarding, not an error)
+
+private struct APIKeySetupView: View {
+    var onSave: () -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "key.fill")
+                .font(.system(size: 40))
+                .foregroundStyle(.secondary)
+
+            Text("Steam Web API Key Required")
+                .font(.title2)
+                .bold()
+
+            Text("To browse the Steam Workshop, you need a free Steam Web API key.\nGet one at steamcommunity.com/dev/apikey — it only takes a minute.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: 380)
+
+            APIKeyInputView(onSave: onSave)
+
+            Link("Open steamcommunity.com/dev/apikey", destination: URL(string: "https://steamcommunity.com/dev/apikey")!)
+                .font(.caption)
+        }
+        .padding(40)
+    }
+}
+
 // MARK: - API Key Input
 
 private struct APIKeyInputView: View {
     @State private var apiKey = WorkshopAPIService.loadAPIKey()
+    var buttonTitle: LocalizedStringKey = "Save & Search"
     var onSave: () -> Void
 
     var body: some View {
@@ -469,10 +491,10 @@ private struct APIKeyInputView: View {
             HStack {
                 TextField("Steam Web API Key", text: $apiKey)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 300)
+                    .frame(width: 260)
                     .onSubmit { save() }
 
-                Button("Save & Search") { save() }
+                Button(buttonTitle) { save() }
                     .buttonStyle(.borderedProminent)
                     .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
             }

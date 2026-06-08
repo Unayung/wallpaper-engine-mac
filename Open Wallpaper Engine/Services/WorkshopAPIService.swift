@@ -85,10 +85,9 @@ class WorkshopAPIService {
         }
 
         let apiKey = Self.loadAPIKey()
-        guard !apiKey.isEmpty else {
-            throw WorkshopAPIError.noAPIKey
+        if !apiKey.isEmpty {
+            queryItems.append(URLQueryItem(name: "key", value: apiKey))
         }
-        queryItems.append(URLQueryItem(name: "key", value: apiKey))
 
         components.queryItems = queryItems
 
@@ -103,7 +102,7 @@ class WorkshopAPIService {
         }
 
         if httpResponse.statusCode == 403 {
-            throw WorkshopAPIError.invalidAPIKey
+            throw apiKey.isEmpty ? WorkshopAPIError.noAPIKey : WorkshopAPIError.invalidAPIKey
         }
 
         guard httpResponse.statusCode == 200 else {

@@ -1,11 +1,3 @@
-//
-//  SceneWallpaperViewModel.swift
-//  Open Wallpaper Engine
-//
-//  Loads and renders Wallpaper Engine scene wallpapers using SpriteKit.
-//  Follows the same ViewModel pattern as VideoWallpaperViewModel.
-//
-
 import SpriteKit
 import SwiftUI
 
@@ -34,6 +26,12 @@ class SceneWallpaperViewModel: ObservableObject {
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(systemDidWake(_:)),
             name: NSWorkspace.didWakeNotification, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(spaceDidChange(_:)),
+            name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(spaceDidChange(_:)),
+            name: NSWorkspace.didActivateApplicationNotification, object: nil)
         loadScene(from: wallpaper)
     }
 
@@ -46,7 +44,7 @@ class SceneWallpaperViewModel: ObservableObject {
 
     func loadScene(from wallpaper: WEWallpaper) {
         let dir = wallpaper.wallpaperDirectory
-        let sceneFile = wallpaper.project.file  // e.g. "scene.json" or "gifscene.json"
+        let sceneFile = wallpaper.project.file
 
         // Derive PKG name from scene file: "scene.json" → "scene.pkg", "gifscene.json" → "gifscene.pkg"
         let pkgName = (sceneFile as NSString).deletingPathExtension + ".pkg"
@@ -64,7 +62,6 @@ class SceneWallpaperViewModel: ObservableObject {
                 Self.log("Failed to parse PKG: \(error)")
             }
         } else if FileManager.default.fileExists(atPath: looseSceneURL.path(percentEncoded: false)) {
-            // Loose files (no .pkg)
             self.pkgParser = nil
             do {
                 let data = try Data(contentsOf: looseSceneURL)
@@ -75,7 +72,6 @@ class SceneWallpaperViewModel: ObservableObject {
         }
 
         guard let scene = scene else {
-            print("[SceneVM] No scene data found")
             NSLog("[SceneVM] No scene data found")
             return
         }
@@ -92,34 +88,37 @@ class SceneWallpaperViewModel: ObservableObject {
 
     private func buildSKScene(from scene: WEScene, wallpaperDir: URL) -> SKScene {
         let projection = scene.general.orthogonalprojection ?? WEOrthogonalProjection(width: 1920, height: 1080)
-        let skScene = SKScene(size: CGSize(width: projection.width, height: projection.height))
+        let sceneSize = CGSize(width: projection.width, height: projection.height)
+        let skScene = SKScene(size: sceneSize)
         skScene.scaleMode = .aspectFill
 
-        // Background color from clearcolor
         if let colorStr = scene.general.clearcolor {
             let c = colorStr.parseColor()
             skScene.backgroundColor = NSColor(red: c.r, green: c.g, blue: c.b, alpha: 1.0)
         }
 
-        // Show only the base background image (no effects/particles/additive layers)
         var hasImage = false
         for obj in scene.objects {
-            guard obj.visible != false, obj.image != nil else { continue }
-            // Skip additive/overlay layers that look like effects
-            if let node = buildImageNode(obj, wallpaperDir: wallpaperDir) {
-                if node.blendMode == .add { continue }
-                skScene.addChild(node)
-                hasImage = true
+            guard obj.visible != false else { continue }
+
+            if obj.image != nil {
+                if let node = buildImageNode(obj, sceneSize: sceneSize, wallpaperDir: wallpaperDir) {
+                    skScene.addChild(node)
+                    if node.blendMode != .add { hasImage = true }
+                }
+            } else if obj.particle != nil {
+                if let node = buildParticleNode(obj, wallpaperDir: wallpaperDir, sceneSize: sceneSize) {
+                    skScene.addChild(node)
+                }
             }
         }
 
-        // Fallback: use preview image
         if !hasImage {
             let previewImage = loadPreviewImage(wallpaperDir: wallpaperDir)
             if let img = previewImage {
                 let node = SKSpriteNode(texture: SKTexture(image: img))
-                node.size = skScene.size
-                node.position = CGPoint(x: skScene.size.width / 2, y: skScene.size.height / 2)
+                node.size = sceneSize
+                node.position = CGPoint(x: sceneSize.width / 2, y: sceneSize.height / 2)
                 skScene.addChild(node)
             }
         }
@@ -137,35 +136,28 @@ class SceneWallpaperViewModel: ObservableObject {
 
     // MARK: - Image Objects
 
-    private func buildImageNode(_ obj: WESceneObject, wallpaperDir: URL) -> SKSpriteNode? {
+    private func buildImageNode(_ obj: WESceneObject, sceneSize: CGSize, wallpaperDir: URL) -> SKSpriteNode? {
         guard let imagePath = obj.image else { return nil }
 
-        // Load model JSON → material JSON → texture
         let model: WEModel? = loadJSON(path: imagePath, wallpaperDir: wallpaperDir)
         guard let materialPath = model?.material else {
-            print("[SceneVM] No material for image object '\(obj.name ?? "")' (model path: \(imagePath))")
             return nil
         }
 
         let material: WEMaterial? = loadJSON(path: materialPath, wallpaperDir: wallpaperDir)
         guard let textureName = material?.passes?.first?.textures?.first else {
-            print("[SceneVM] No texture in material '\(materialPath)' (material decoded: \(material != nil))")
             return nil
         }
 
-        // Load texture: try .tex file first, then common image formats
-        Self.log("Loading texture '\(textureName)' for '\(obj.name ?? "")'")
         let image = loadTexture(named: textureName, materialDir: materialPath, wallpaperDir: wallpaperDir)
         guard let image = image else {
-            Self.log("FAILED to load texture '\(textureName)' from material dir '\(materialPath)'")
             return nil
         }
-        Self.log("Texture loaded: \(image.size)")
 
         let texture = SKTexture(image: image)
         let node = SKSpriteNode(texture: texture)
 
-        // Size from object, or use pixel dimensions (not point size, which is halved on Retina)
+        // Use pixel dimensions, not point size (which is halved on Retina)
         if let sizeStr = obj.size {
             let (w, h) = sizeStr.parseVector2()
             node.size = CGSize(width: w, height: h)
@@ -175,23 +167,20 @@ class SceneWallpaperViewModel: ObservableObject {
             node.size = CGSize(width: pixelW, height: pixelH)
         }
 
-        // Position: WE uses top-left origin with Y-down, SpriteKit uses bottom-left with Y-up
+        // WE: top-left origin, Y-down. SpriteKit: bottom-left origin, Y-up.
         if let originStr = obj.origin {
             let (x, y, _) = originStr.parseVector3()
-            node.position = CGPoint(x: x, y: y)
+            node.position = CGPoint(x: x, y: sceneSize.height - y)
         }
 
-        // Alpha
         node.alpha = CGFloat(obj.alpha ?? 1.0)
 
-        // Color tint
         if let colorStr = obj.color {
             let c = colorStr.parseColor()
             node.color = NSColor(red: c.r, green: c.g, blue: c.b, alpha: 1.0)
             node.colorBlendFactor = (obj.colorBlendMode ?? 0) > 0 ? 1.0 : 0.0
         }
 
-        // Blend mode from material
         if let blending = material?.passes?.first?.blending {
             switch blending {
             case "additive": node.blendMode = .add
@@ -209,14 +198,10 @@ class SceneWallpaperViewModel: ObservableObject {
         guard let particlePath = obj.particle else { return nil }
 
         let particleSystem: WEParticleSystem? = loadJSON(path: particlePath, wallpaperDir: wallpaperDir)
-        guard let ps = particleSystem else {
-            print("[SceneVM] Failed to load particle system '\(particlePath)'")
-            return nil
-        }
+        guard let ps = particleSystem else { return nil }
 
         let emitter = SKEmitterNode()
 
-        // Particle texture from material
         if let materialPath = ps.material {
             let material: WEMaterial? = loadJSON(path: materialPath, wallpaperDir: wallpaperDir)
             if let texName = material?.passes?.first?.textures?.first {
@@ -227,29 +212,24 @@ class SceneWallpaperViewModel: ObservableObject {
                 }
             }
 
-            // Blend mode
             if let blending = material?.passes?.first?.blending {
                 emitter.particleBlendMode = blending == "additive" ? .add : .alpha
             }
         }
 
-        // Emitter properties
         if let em = ps.emitter?.first {
             emitter.particleBirthRate = CGFloat(em.rate ?? 100)
 
-            // Apply instance override rate
             if let overrideRate = obj.instanceoverride?.rate?.value {
                 emitter.particleBirthRate *= CGFloat(overrideRate)
             }
 
-            // Emission area from distancemax (sphererandom emitter)
             if em.name == "sphererandom" {
                 let dist = CGFloat(em.distancemax ?? 100)
                 emitter.particlePositionRange = CGVector(dx: dist * 2, dy: dist * 2)
             }
         }
 
-        // Initializers
         for ini in ps.initializer ?? [] {
             switch ini.name {
             case "lifetimerandom":
@@ -262,7 +242,6 @@ class SceneWallpaperViewModel: ObservableObject {
                 let minSize = ini.min?.doubleValue ?? 1
                 let maxSize = ini.max?.doubleValue ?? 1
                 let avgSize = (minSize + maxSize) / 2
-                // Apply instance override size
                 let sizeMultiplier = obj.instanceoverride?.size ?? 1.0
                 emitter.particleSize = CGSize(width: avgSize * sizeMultiplier, height: avgSize * sizeMultiplier)
                 emitter.particleScaleRange = CGFloat((maxSize - minSize) / avgSize) * CGFloat(sizeMultiplier)
@@ -304,7 +283,6 @@ class SceneWallpaperViewModel: ObservableObject {
             }
         }
 
-        // Operators
         for op in ps.operator ?? [] {
             switch op.name {
             case "movement":
@@ -320,7 +298,6 @@ class SceneWallpaperViewModel: ObservableObject {
                 }
 
             case "alphafade":
-                // Fade in/out over lifetime
                 let fadeIn = op.fadeintime ?? 0
                 let fadeOut = op.fadeouttime ?? 1
                 // SpriteKit particleAlphaSpeed: rate of alpha change per second
@@ -343,20 +320,17 @@ class SceneWallpaperViewModel: ObservableObject {
             emitter.particleRotation = emitter.emissionAngle
         }
 
-        // Position from object origin
         if let originStr = obj.origin {
             let (x, y, _) = originStr.parseVector3()
-            emitter.position = CGPoint(x: x, y: y)
+            emitter.position = CGPoint(x: x, y: sceneSize.height - y)
         }
 
-        // Scale from object
         if let scaleStr = obj.scale {
             let (sx, sy, _) = scaleStr.parseVector3()
             emitter.xScale = CGFloat(sx)
             emitter.yScale = CGFloat(sy)
         }
 
-        // Max particles
         emitter.numParticlesToEmit = 0 // infinite
 
         return emitter
@@ -365,11 +339,9 @@ class SceneWallpaperViewModel: ObservableObject {
     // MARK: - Asset Loading
 
     private func loadJSON<T: Decodable>(path: String, wallpaperDir: URL) -> T? {
-        // Try PKG first
         if let parser = pkgParser, let data = parser.extractFile(named: path) {
             return try? JSONDecoder().decode(T.self, from: data)
         }
-        // Fall back to loose file
         let url = wallpaperDir.appending(path: path)
         guard let data = try? Data(contentsOf: url) else { return nil }
         return try? JSONDecoder().decode(T.self, from: data)
@@ -391,7 +363,6 @@ class SceneWallpaperViewModel: ObservableObject {
         texPaths.append("\(name).tex")
 
         for texPath in texPaths {
-            // Try .tex from PKG
             if let parser = pkgParser, let texData = parser.extractFile(named: texPath) {
                 Self.log("  TEX from PKG '\(texPath)' size=\(texData.count)")
                 let texParser = TEXParser(data: Data(texData))  // Copy to reset indices
@@ -401,7 +372,6 @@ class SceneWallpaperViewModel: ObservableObject {
                 Self.log("  TEXParser.extractImage() returned nil for '\(texPath)'")
             }
 
-            // Try .tex from loose file
             let texURL = wallpaperDir.appending(path: texPath)
             if let texData = try? Data(contentsOf: texURL) {
                 let texParser = TEXParser(data: texData)
@@ -411,7 +381,6 @@ class SceneWallpaperViewModel: ObservableObject {
             }
         }
 
-        // Try common image formats directly
         for ext in ["png", "jpg", "jpeg", "gif"] {
             let imgPath = materialDirPath.isEmpty ? "\(name).\(ext)" : "\(materialDirPath)/\(name).\(ext)"
             if let parser = pkgParser, let imgData = parser.extractFile(named: imgPath) {
@@ -474,12 +443,14 @@ class SceneWallpaperViewModel: ObservableObject {
     // MARK: - System Events
 
     @objc func systemWillSleep(_ notification: Notification) {
-        print("[SceneVM] System is going to sleep")
         skScene?.isPaused = true
     }
 
     @objc func systemDidWake(_ notification: Notification) {
-        print("[SceneVM] System woke up")
+        skScene?.isPaused = false
+    }
+
+    @objc func spaceDidChange(_ notification: Notification) {
         skScene?.isPaused = false
     }
 }

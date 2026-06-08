@@ -1,10 +1,3 @@
-//
-//  WebWallpaperView.swift
-//  Open Wallpaper Engine
-//
-//  Created by Haren on 2023/8/13.
-//
-
 import Cocoa
 import SwiftUI
 import WebKit
@@ -28,6 +21,7 @@ struct WebWallpaperView: NSViewRepresentable {
 
         let nsView = WKWebView(frame: .zero, configuration: configuration)
         nsView.navigationDelegate = viewModel
+        viewModel.webView = nsView
         Self.loadWallpaper(nsView, viewModel: viewModel)
         return nsView
     }
@@ -36,7 +30,6 @@ struct WebWallpaperView: NSViewRepresentable {
     /// so the origin isn't file://, or loadFileURL for local wallpapers.
     private static func loadWallpaper(_ webView: WKWebView, viewModel: WebWallpaperViewModel) {
         let fileUrl = viewModel.fileUrl
-        // Check if the HTML contains a redirect/embed to an external URL
         if let html = try? String(contentsOf: fileUrl, encoding: .utf8),
            html.contains("youtube.com") || html.contains("vimeo.com") {
             // Load as HTML string with https origin so YouTube/Vimeo embeds work

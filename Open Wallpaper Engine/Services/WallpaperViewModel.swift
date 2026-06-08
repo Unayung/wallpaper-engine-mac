@@ -1,13 +1,5 @@
-//
-//  WallpaperViewModel.swift
-//  Open Wallpaper Engine
-//
-//  Created by Haren on 2023/8/14.
-//
-
 import SwiftUI
 
-/// Provide Wallpaper Database for WallpaperView and ContentView etc.
 class WallpaperViewModel: ObservableObject {
     @Published var nextCurrentWallpaper: WEWallpaper =
     WEWallpaper(using: .invalid, where: Bundle.main.url(forResource: "WallpaperNotFound", withExtension: "mp4")!) {
@@ -30,14 +22,12 @@ class WallpaperViewModel: ObservableObject {
         didSet { saveWallpapers() }
     }
 
-    /// Screens where wallpaper display is enabled.
     @Published var enabledScreens: Set<String> = [] {
         didSet {
             UserDefaults.standard.set(Array(enabledScreens), forKey: "EnabledScreens")
         }
     }
 
-    /// The screen currently selected in the UI for configuration.
     @Published var selectedScreenId: String = ""
 
     static let defaultWallpaper = WEWallpaper(using: .invalid, where: Bundle.main.url(forResource: "WallpaperNotFound", withExtension: "mp4")!)
@@ -73,7 +63,6 @@ class WallpaperViewModel: ObservableObject {
 
     // MARK: - Wallpaper access
 
-    /// Convenience: wallpaper for the currently selected screen in the UI.
     var currentWallpaper: WEWallpaper {
         get {
             wallpapers[selectedScreenId] ?? Self.defaultWallpaper
@@ -83,12 +72,10 @@ class WallpaperViewModel: ObservableObject {
         }
     }
 
-    /// Get wallpaper for a specific screen.
     func wallpaper(for screenId: String) -> WEWallpaper {
         wallpapers[screenId] ?? Self.defaultWallpaper
     }
 
-    /// Set wallpaper for a specific screen.
     func setWallpaper(_ wallpaper: WEWallpaper, for screenId: String) {
         wallpapers[screenId] = wallpaper
         addToRecents(wallpaper)
@@ -104,7 +91,7 @@ class WallpaperViewModel: ObservableObject {
         } else {
             enabledScreens.insert(screenId)
         }
-        AppDelegate.shared.rebuildWallpaperWindows()
+        AppDelegate.shared.wallpaperWindowManager.rebuild()
     }
 
     /// Remove a wallpaper from all screens (e.g., when unsubscribing).
@@ -117,55 +104,30 @@ class WallpaperViewModel: ObservableObject {
     }
 
     var lastPlayRate: Float = 1.0
-    @Published public var playRate: Float = 1.0 {
-        willSet {
-            if newValue == 0.0 {
-                for (index, item) in AppDelegate.shared.statusItem.menu!.items.enumerated() {
-                    if item.title == "Pause" {
-                        AppDelegate.shared.statusItem.menu!.items[index] =
-                            .init(title: "Resume", systemImage: "play.fill", action: #selector(AppDelegate.shared.resume), keyEquivalent: "")
-                    }
-                }
-            } else {
-                for (index, item) in AppDelegate.shared.statusItem.menu!.items.enumerated() {
-                    if item.title == "Resume" {
-                        AppDelegate.shared.statusItem.menu!.items[index] =
-                            .init(title: "Pause", systemImage: "pause.fill", action: #selector(AppDelegate.shared.pause), keyEquivalent: "")
-                    }
-                }
-            }
-        }
+    @Published public var playRate: Float =
+        UserDefaults.standard.object(forKey: "WPPlayRate") != nil
+            ? UserDefaults.standard.float(forKey: "WPPlayRate")
+            : 1.0
+    {
         didSet {
-            self.lastPlayRate = oldValue
+            lastPlayRate = oldValue == 0 ? lastPlayRate : oldValue
+            UserDefaults.standard.set(playRate, forKey: "WPPlayRate")
         }
     }
 
     var lastPlayVolume: Float = 1.0
-    @Published public var playVolume: Float = 1.0 {
-        willSet {
-            if newValue == 0.0 {
-                for (index, item) in AppDelegate.shared.statusItem.menu!.items.enumerated() {
-                    if item.title == "Mute" {
-                        AppDelegate.shared.statusItem.menu!.items[index] =
-                            .init(title: String(localized: "Unmute"), systemImage: "speaker.fill", action: #selector(AppDelegate.shared.unmute), keyEquivalent: "")
-                    }
-                }
-            } else {
-                for (index, item) in AppDelegate.shared.statusItem.menu!.items.enumerated() {
-                    if item.title == "Unmute" {
-                        AppDelegate.shared.statusItem.menu!.items[index] =
-                            .init(title: String(localized: "Mute"), systemImage: "speaker.slash.fill", action: #selector(AppDelegate.shared.mute), keyEquivalent: "")
-                    }
-                }
-            }
-        }
+    @Published public var playVolume: Float =
+        UserDefaults.standard.object(forKey: "WPPlayVolume") != nil
+            ? UserDefaults.standard.float(forKey: "WPPlayVolume")
+            : 1.0
+    {
         didSet {
-            self.lastPlayVolume = oldValue
+            lastPlayVolume = oldValue == 0 ? lastPlayVolume : oldValue
+            UserDefaults.standard.set(playVolume, forKey: "WPPlayVolume")
         }
     }
 
     init() {
-        // Load per-screen wallpapers
         if let data = UserDefaults.standard.data(forKey: "ScreenWallpapers"),
            let saved = try? JSONDecoder().decode([String: WEWallpaper].self, from: data) {
             // Filter out any compound keys (screenId_spaceId) from previous per-space experiment
@@ -178,17 +140,13 @@ class WallpaperViewModel: ObservableObject {
             self.wallpapers = [mainId: wallpaper]
         }
 
-        // Load enabled screens (default: all connected screens enabled)
         if let saved = UserDefaults.standard.array(forKey: "EnabledScreens") as? [String] {
             self.enabledScreens = Set(saved)
         } else {
             self.enabledScreens = Set(NSScreen.screens.map { Self.screenId(for: $0) })
         }
 
-        // Default selected screen to main
         self.selectedScreenId = Self.mainScreenId()
-
-        // Load recent wallpapers
         loadRecents()
     }
 
