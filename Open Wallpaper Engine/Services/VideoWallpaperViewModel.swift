@@ -60,8 +60,12 @@ class VideoWallpaperViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in
                 guard let self, status == .paused, self.playRate > 0 else { return }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    if self.playRate > 0 { self.player.rate = self.playRate }
+                for delay in [0.2, 0.6, 1.2] {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                        if self.playRate > 0 && self.player.timeControlStatus == .paused {
+                            self.player.rate = self.playRate
+                        }
+                    }
                 }
             }
             .store(in: &cancellables)
