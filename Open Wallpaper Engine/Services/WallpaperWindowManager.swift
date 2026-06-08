@@ -10,7 +10,7 @@ final class WallpaperWindowManager {
     private var occlusionObservers: [NSObjectProtocol] = []
     // Heartbeat: backstop for any case notifications miss
     private var redrawTimer: DispatchSourceTimer?
-    private static let redrawInterval: DispatchTimeInterval = .seconds(2)
+    private static let redrawInterval: DispatchTimeInterval = .milliseconds(500)
 
     init(viewModel: WallpaperViewModel) {
         self.viewModel = viewModel
@@ -72,9 +72,12 @@ final class WallpaperWindowManager {
 
     private func forceCompositorRedraw() {
         for window in windows.values {
+            // orderFront forces WindowServer to re-evaluate this window's position
+            // in the compositor z-stack, potentially breaking a Stage Manager snapshot cache
+            window.orderFront(nil)
             guard let contentView = window.contentView else { continue }
             contentView.layer?.setNeedsDisplay()
-            contentView.display()  // Unconditional — displayIfNeeded only works if dirty flag is set
+            contentView.display()
         }
     }
 
