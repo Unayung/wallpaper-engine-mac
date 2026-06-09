@@ -1,322 +1,342 @@
+import AVFoundation
 import SpriteKit
 import SwiftUI
 
 class SceneWallpaperViewModel: ObservableObject {
-    static func log(_ msg: String) {
-        let line = "[SceneVM] \(msg)"
-        NSLog("%@", line)
-    }
+
+    // MARK: - Public state
 
     var currentWallpaper: WEWallpaper {
-        willSet {
-            loadScene(from: newValue)
-        }
+        willSet { loadScene(from: newValue) }
     }
 
     @Published var skScene: SKScene?
 
+    // MARK: - Private state
+
     private var pkgParser: PKGParser?
+
+    // Retained video players (SKVideoNode holds a weak ref only)
+    private var videoPlayers: [AVQueuePlayer] = []
+    private var videoLoopers: [AVPlayerLooper] = []
+    private var tempVideoFiles: [URL] = []
+
+    // Background audio
+    private var audioPlayers: [AVAudioPlayer] = []
+
+    // MARK: - Init / deinit
 
     init(wallpaper: WEWallpaper) {
         self.currentWallpaper = wallpaper
-        Self.log("init: wallpaper=\(wallpaper.project.title ?? "?") dir=\(wallpaper.wallpaperDirectory.path)")
-        NSWorkspace.shared.notificationCenter.addObserver(
-            self, selector: #selector(systemWillSleep(_:)),
-            name: NSWorkspace.screensDidSleepNotification, object: nil)
-        NSWorkspace.shared.notificationCenter.addObserver(
-            self, selector: #selector(systemDidWake(_:)),
-            name: NSWorkspace.didWakeNotification, object: nil)
-        NSWorkspace.shared.notificationCenter.addObserver(
-            self, selector: #selector(spaceDidChange(_:)),
-            name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
-        NSWorkspace.shared.notificationCenter.addObserver(
-            self, selector: #selector(spaceDidChange(_:)),
-            name: NSWorkspace.didActivateApplicationNotification, object: nil)
+        registerObservers()
         loadScene(from: wallpaper)
     }
 
     deinit {
         NotificationCenter.default.removeObserver(self)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
+        videoPlayers.forEach { $0.pause() }
+        audioPlayers.forEach { $0.stop() }
+        for url in tempVideoFiles { try? FileManager.default.removeItem(at: url) }
     }
 
-    // MARK: - Scene Loading
+    // MARK: - Observers
+
+    private func registerObservers() {
+        let ws = NSWorkspace.shared.notificationCenter
+        ws.addObserver(self, selector: #selector(systemWillSleep(_:)),
+                       name: NSWorkspace.screensDidSleepNotification, object: nil)
+        ws.addObserver(self, selector: #selector(systemDidWake(_:)),
+                       name: NSWorkspace.didWakeNotification, object: nil)
+        ws.addObserver(self, selector: #selector(spaceDidChange(_:)),
+                       name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
+        ws.addObserver(self, selector: #selector(spaceDidChange(_:)),
+                       name: NSWorkspace.didActivateApplicationNotification, object: nil)
+    }
+
+    // MARK: - Scene loading
 
     func loadScene(from wallpaper: WEWallpaper) {
         let dir = wallpaper.wallpaperDirectory
         let sceneFile = wallpaper.project.file
-
-        // Derive PKG name from scene file: "scene.json" → "scene.pkg", "gifscene.json" → "gifscene.pkg"
         let pkgName = (sceneFile as NSString).deletingPathExtension + ".pkg"
         let pkgURL = dir.appending(path: pkgName)
-        let looseSceneURL = dir.appending(path: sceneFile)
+        let looseURL = dir.appending(path: sceneFile)
+
+        // Tear down previous media before loading new scene
+        videoPlayers.forEach { $0.pause() }
+        videoPlayers = []; videoLoopers = []
+        for url in tempVideoFiles { try? FileManager.default.removeItem(at: url) }
+        tempVideoFiles = []
+        audioPlayers.forEach { $0.stop() }
+        audioPlayers = []
 
         var scene: WEScene?
-
         if FileManager.default.fileExists(atPath: pkgURL.path(percentEncoded: false)) {
             do {
                 let parser = try PKGParser(url: pkgURL)
-                self.pkgParser = parser
+                pkgParser = parser
                 scene = try parser.extractJSON(named: sceneFile, as: WEScene.self)
             } catch {
-                Self.log("Failed to parse PKG: \(error)")
+                WELogger.shared.error("[SceneVM] PKG parse failed: \(error)")
             }
-        } else if FileManager.default.fileExists(atPath: looseSceneURL.path(percentEncoded: false)) {
-            self.pkgParser = nil
-            do {
-                let data = try Data(contentsOf: looseSceneURL)
-                scene = try JSONDecoder().decode(WEScene.self, from: data)
-            } catch {
-                Self.log("Failed to parse loose \(sceneFile): \(error)")
-            }
+        } else if FileManager.default.fileExists(atPath: looseURL.path(percentEncoded: false)) {
+            pkgParser = nil
+            scene = try? JSONDecoder().decode(WEScene.self, from: Data(contentsOf: looseURL))
         }
 
-        guard let scene = scene else {
-            NSLog("[SceneVM] No scene data found")
+        guard let scene else {
+            WELogger.shared.verbose("[SceneVM] No scene data found in \(sceneFile)")
             return
         }
 
-        Self.log("Scene loaded: \(scene.objects.count) objects from \(sceneFile)")
-        let skScene = buildSKScene(from: scene, wallpaperDir: dir)
-        Self.log("SKScene built: \(skScene.children.count) children")
-        DispatchQueue.main.async {
-            self.skScene = skScene
-        }
+        WELogger.shared.verbose("[SceneVM] \(scene.objects.count) objects in \(sceneFile)")
+        let built = buildSKScene(from: scene, dir: dir)
+        DispatchQueue.main.async { self.skScene = built }
     }
 
-    // MARK: - SpriteKit Scene Building
+    // MARK: - SpriteKit scene builder
 
-    private func buildSKScene(from scene: WEScene, wallpaperDir: URL) -> SKScene {
-        let projection = scene.general.orthogonalprojection ?? WEOrthogonalProjection(width: 1920, height: 1080)
-        let sceneSize = CGSize(width: projection.width, height: projection.height)
-        let skScene = SKScene(size: sceneSize)
-        skScene.scaleMode = .aspectFill
+    private func buildSKScene(from scene: WEScene, dir: URL) -> SKScene {
+        let proj = scene.general.orthogonalprojection ?? WEOrthogonalProjection(width: 1920, height: 1080)
+        let size = CGSize(width: proj.width, height: proj.height)
+        let sk = SKScene(size: size)
+        sk.scaleMode = .aspectFill
 
-        if let colorStr = scene.general.clearcolor {
-            let c = colorStr.parseColor()
-            skScene.backgroundColor = NSColor(red: c.r, green: c.g, blue: c.b, alpha: 1.0)
+        if let cc = scene.general.clearcolor {
+            let c = cc.parseColor()
+            sk.backgroundColor = NSColor(red: c.r, green: c.g, blue: c.b, alpha: 1)
         }
 
-        var hasImage = false
+        var hasVisibleImage = false
         for obj in scene.objects {
             guard obj.visible != false else { continue }
 
-            if obj.image != nil {
-                if let node = buildImageNode(obj, sceneSize: sceneSize, wallpaperDir: wallpaperDir) {
-                    skScene.addChild(node)
-                    if node.blendMode != .add { hasImage = true }
+            if let _ = obj.sound {
+                loadSoundObject(obj, dir: dir)
+            } else if obj.image != nil {
+                if let node = buildImageNode(obj, sceneSize: size, dir: dir) {
+                    sk.addChild(node)
+                    if let sprite = node as? SKSpriteNode, sprite.blendMode != .add { hasVisibleImage = true }
+                    if node is SKVideoNode { hasVisibleImage = true }
                 }
             } else if obj.particle != nil {
-                if let node = buildParticleNode(obj, wallpaperDir: wallpaperDir, sceneSize: sceneSize) {
-                    skScene.addChild(node)
+                if let node = buildParticleNode(obj, dir: dir, sceneSize: size) {
+                    sk.addChild(node)
                 }
             }
         }
 
-        if !hasImage {
-            let previewImage = loadPreviewImage(wallpaperDir: wallpaperDir)
-            if let img = previewImage {
-                let node = SKSpriteNode(texture: SKTexture(image: img))
-                node.size = sceneSize
-                node.position = CGPoint(x: sceneSize.width / 2, y: sceneSize.height / 2)
-                skScene.addChild(node)
-            }
+        if !hasVisibleImage, let preview = loadPreviewImage(dir: dir) {
+            let node = SKSpriteNode(texture: SKTexture(image: preview))
+            node.size = size
+            node.position = CGPoint(x: size.width/2, y: size.height/2)
+            sk.addChild(node)
         }
 
-        return skScene
+        return sk
     }
 
-    private func loadPreviewImage(wallpaperDir: URL) -> NSImage? {
-        for name in ["preview.jpg", "preview.png", "preview.gif"] {
-            let url = wallpaperDir.appending(path: name)
-            if let image = NSImage(contentsOf: url) { return image }
-        }
-        return nil
-    }
+    // MARK: - Image objects
 
-    // MARK: - Image Objects
-
-    private func buildImageNode(_ obj: WESceneObject, sceneSize: CGSize, wallpaperDir: URL) -> SKSpriteNode? {
+    private func buildImageNode(_ obj: WESceneObject, sceneSize: CGSize, dir: URL) -> SKNode? {
         guard let imagePath = obj.image else { return nil }
+        let model: WEModel? = loadJSON(path: imagePath, dir: dir)
+        guard let materialPath = model?.material else { return nil }
+        let material: WEMaterial? = loadJSON(path: materialPath, dir: dir)
+        // textures is [String?]? — first non-nil element is the primary texture
+        guard let textureName = (material?.passes?.first?.textures?.compactMap { $0 })?.first else { return nil }
 
-        let model: WEModel? = loadJSON(path: imagePath, wallpaperDir: wallpaperDir)
-        guard let materialPath = model?.material else {
-            return nil
-        }
-
-        let material: WEMaterial? = loadJSON(path: materialPath, wallpaperDir: wallpaperDir)
-        guard let textureName = material?.passes?.first?.textures?.first else {
-            return nil
-        }
-
-        let image = loadTexture(named: textureName, materialDir: materialPath, wallpaperDir: wallpaperDir)
-        guard let image = image else {
-            return nil
-        }
-
-        let texture = SKTexture(image: image)
-        let node = SKSpriteNode(texture: texture)
-
-        // Use pixel dimensions, not point size (which is halved on Retina)
+        // Determine display size and position
+        let nodeSize: CGSize
         if let sizeStr = obj.size {
             let (w, h) = sizeStr.parseVector2()
-            node.size = CGSize(width: w, height: h)
+            nodeSize = CGSize(width: w, height: h)
+        } else if let mw = model?.width, let mh = model?.height {
+            nodeSize = CGSize(width: mw, height: mh)
         } else {
-            let pixelW = image.representations.first?.pixelsWide ?? Int(image.size.width)
-            let pixelH = image.representations.first?.pixelsHigh ?? Int(image.size.height)
-            node.size = CGSize(width: pixelW, height: pixelH)
+            nodeSize = sceneSize
         }
 
-        // WE: top-left origin, Y-down. SpriteKit: bottom-left origin, Y-up.
+        let nodePos: CGPoint
         if let originStr = obj.origin {
             let (x, y, _) = originStr.parseVector3()
-            node.position = CGPoint(x: x, y: sceneSize.height - y)
+            nodePos = CGPoint(x: x, y: sceneSize.height - y)
+        } else {
+            nodePos = CGPoint(x: sceneSize.width/2, y: sceneSize.height/2)
         }
 
+        // Try loading the texture — could be static image or embedded video
+        guard let tex = loadTexture(named: textureName, materialDir: materialPath, dir: dir) else { return nil }
+        switch tex {
+        case .image(let image):
+            return buildSpriteNode(image: image, obj: obj, size: nodeSize, position: nodePos,
+                                   blending: material?.passes?.first?.blending)
+        case .video(let mp4Data):
+            return buildVideoNode(mp4Data: mp4Data, size: nodeSize, position: nodePos)
+        }
+    }
+
+    private func buildSpriteNode(image: NSImage, obj: WESceneObject, size: CGSize,
+                                  position: CGPoint, blending: String?) -> SKSpriteNode {
+        let node = SKSpriteNode(texture: SKTexture(image: image))
+        node.size = size
+        node.position = position
         node.alpha = CGFloat(obj.alpha ?? 1.0)
 
         if let colorStr = obj.color {
             let c = colorStr.parseColor()
-            node.color = NSColor(red: c.r, green: c.g, blue: c.b, alpha: 1.0)
+            node.color = NSColor(red: c.r, green: c.g, blue: c.b, alpha: 1)
             node.colorBlendFactor = (obj.colorBlendMode ?? 0) > 0 ? 1.0 : 0.0
         }
 
-        if let blending = material?.passes?.first?.blending {
-            switch blending {
-            case "additive": node.blendMode = .add
-            case "translucent": node.blendMode = .alpha
-            default: node.blendMode = .alpha
-            }
+        switch blending {
+        case "additive": node.blendMode = .add
+        default: node.blendMode = .alpha
         }
 
         return node
     }
 
-    // MARK: - Particle Objects
+    private func buildVideoNode(mp4Data: Data, size: CGSize, position: CGPoint) -> SKVideoNode? {
+        let tmpURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("\(UUID().uuidString).mp4")
+        do {
+            try mp4Data.write(to: tmpURL)
+            tempVideoFiles.append(tmpURL)
+        } catch {
+            WELogger.shared.error("[SceneVM] Failed to write temp video: \(error)")
+            return nil
+        }
 
-    private func buildParticleNode(_ obj: WESceneObject, wallpaperDir: URL, sceneSize: CGSize) -> SKNode? {
+        let asset = AVURLAsset(url: tmpURL)
+        let item = AVPlayerItem(asset: asset)
+        let player = AVQueuePlayer()
+        let looper = AVPlayerLooper(player: player, templateItem: item)
+        videoPlayers.append(player)
+        videoLoopers.append(looper)
+
+        let node = SKVideoNode(avPlayer: player)
+        node.size = size
+        node.position = position
+        player.play()
+        return node
+    }
+
+    // MARK: - Sound objects
+
+    private func loadSoundObject(_ obj: WESceneObject, dir: URL) {
+        guard let paths = obj.sound else { return }
+        for path in paths {
+            var audioURL: URL?
+            if let parser = pkgParser, let data = parser.extractFile(named: path) {
+                let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+                    .appendingPathComponent("\(UUID().uuidString).\((path as NSString).pathExtension)")
+                if (try? data.write(to: tmp)) != nil {
+                    tempVideoFiles.append(tmp)
+                    audioURL = tmp
+                }
+            } else {
+                let candidate = dir.appending(path: path)
+                if FileManager.default.fileExists(atPath: candidate.path(percentEncoded: false)) {
+                    audioURL = candidate
+                }
+            }
+            guard let url = audioURL else { continue }
+            if let player = try? AVAudioPlayer(contentsOf: url) {
+                player.numberOfLoops = -1  // loop indefinitely
+                player.volume = Float(AppDelegate.shared.wallpaperViewModel.playVolume)
+                player.play()
+                audioPlayers.append(player)
+            }
+        }
+    }
+
+    // MARK: - Particle objects
+
+    private func buildParticleNode(_ obj: WESceneObject, dir: URL, sceneSize: CGSize) -> SKNode? {
         guard let particlePath = obj.particle else { return nil }
-
-        let particleSystem: WEParticleSystem? = loadJSON(path: particlePath, wallpaperDir: wallpaperDir)
-        guard let ps = particleSystem else { return nil }
+        let ps: WEParticleSystem? = loadJSON(path: particlePath, dir: dir)
+        guard let ps else { return nil }
 
         let emitter = SKEmitterNode()
 
         if let materialPath = ps.material {
-            let material: WEMaterial? = loadJSON(path: materialPath, wallpaperDir: wallpaperDir)
-            if let texName = material?.passes?.first?.textures?.first {
-                let texImage = loadTexture(named: texName, materialDir: materialPath, wallpaperDir: wallpaperDir)
-                    ?? generateProceduralTexture(named: texName)
-                if let img = texImage {
+            let mat: WEMaterial? = loadJSON(path: materialPath, dir: dir)
+            if let texName = mat?.passes?.first?.textures?.first ?? nil {
+                if let result = loadTexture(named: texName, materialDir: materialPath, dir: dir),
+                   case .image(let img) = result {
+                    emitter.particleTexture = SKTexture(image: img)
+                } else if let img = generateProceduralTexture(named: texName) {
                     emitter.particleTexture = SKTexture(image: img)
                 }
             }
-
-            if let blending = material?.passes?.first?.blending {
+            if let blending = mat?.passes?.first?.blending {
                 emitter.particleBlendMode = blending == "additive" ? .add : .alpha
             }
         }
 
         if let em = ps.emitter?.first {
             emitter.particleBirthRate = CGFloat(em.rate ?? 100)
-
             if let overrideRate = obj.instanceoverride?.rate?.value {
                 emitter.particleBirthRate *= CGFloat(overrideRate)
             }
-
             if em.name == "sphererandom" {
                 let dist = CGFloat(em.distancemax ?? 100)
-                emitter.particlePositionRange = CGVector(dx: dist * 2, dy: dist * 2)
+                emitter.particlePositionRange = CGVector(dx: dist*2, dy: dist*2)
             }
         }
 
         for ini in ps.initializer ?? [] {
             switch ini.name {
             case "lifetimerandom":
-                let minLife = ini.min?.doubleValue ?? 1
-                let maxLife = ini.max?.doubleValue ?? 1
-                emitter.particleLifetime = CGFloat((minLife + maxLife) / 2)
-                emitter.particleLifetimeRange = CGFloat(maxLife - minLife)
-
+                let lo = ini.min?.doubleValue ?? 1, hi = ini.max?.doubleValue ?? 1
+                emitter.particleLifetime = CGFloat((lo+hi)/2)
+                emitter.particleLifetimeRange = CGFloat(hi-lo)
             case "sizerandom":
-                let minSize = ini.min?.doubleValue ?? 1
-                let maxSize = ini.max?.doubleValue ?? 1
-                let avgSize = (minSize + maxSize) / 2
-                let sizeMultiplier = obj.instanceoverride?.size ?? 1.0
-                emitter.particleSize = CGSize(width: avgSize * sizeMultiplier, height: avgSize * sizeMultiplier)
-                emitter.particleScaleRange = CGFloat((maxSize - minSize) / avgSize) * CGFloat(sizeMultiplier)
-
+                let lo = ini.min?.doubleValue ?? 1, hi = ini.max?.doubleValue ?? 1
+                let avg = (lo+hi)/2, mul = obj.instanceoverride?.size ?? 1.0
+                emitter.particleSize = CGSize(width: avg*mul, height: avg*mul)
+                emitter.particleScaleRange = CGFloat((hi-lo)/avg) * CGFloat(mul)
             case "velocityrandom":
-                let minV = ini.min?.vectorValue ?? (0, 0, 0)
-                let maxV = ini.max?.vectorValue ?? (0, 0, 0)
-                // Use Y component for speed (primary direction in most WE particles)
-                let avgSpeedY = (minV.1 + maxV.1) / 2
-                let avgSpeedX = (minV.0 + maxV.0) / 2
-                let speed = sqrt(avgSpeedX * avgSpeedX + avgSpeedY * avgSpeedY)
+                let minV = ini.min?.vectorValue ?? (0,0,0)
+                let maxV = ini.max?.vectorValue ?? (0,0,0)
+                let ax = (minV.0+maxV.0)/2, ay = (minV.1+maxV.1)/2
+                let speed = sqrt(ax*ax+ay*ay)
                 emitter.particleSpeed = CGFloat(speed)
-                emitter.particleSpeedRange = CGFloat(abs(maxV.1 - minV.1) / 2)
-                // Emission angle: atan2 of velocity direction
-                if speed > 0 {
-                    // SpriteKit Y is up, WE Y is down for velocity
-                    emitter.emissionAngle = CGFloat(atan2(-avgSpeedY, avgSpeedX))
-                    emitter.emissionAngleRange = 0.1
-                }
-
+                emitter.particleSpeedRange = CGFloat(abs(maxV.1-minV.1)/2)
+                if speed > 0 { emitter.emissionAngle = CGFloat(atan2(-ay, ax)); emitter.emissionAngleRange = 0.1 }
             case "alpharandom":
-                let minA = ini.min?.doubleValue ?? 1
-                let maxA = ini.max?.doubleValue ?? 1
-                emitter.particleAlpha = CGFloat((minA + maxA) / 2)
-                emitter.particleAlphaRange = CGFloat(maxA - minA)
-
+                let lo = ini.min?.doubleValue ?? 1, hi = ini.max?.doubleValue ?? 1
+                emitter.particleAlpha = CGFloat((lo+hi)/2)
+                emitter.particleAlphaRange = CGFloat(hi-lo)
             case "colorrandom":
-                if let maxColor = ini.max?.vectorValue {
-                    // Colors in WE particles are 0-255
-                    emitter.particleColor = NSColor(
-                        red: maxColor.0 / 255.0,
-                        green: maxColor.1 / 255.0,
-                        blue: maxColor.2 / 255.0,
-                        alpha: 1.0)
+                if let maxC = ini.max?.vectorValue {
+                    emitter.particleColor = NSColor(red: maxC.0/255, green: maxC.1/255, blue: maxC.2/255, alpha: 1)
                 }
-
-            default:
-                break
+            default: break
             }
         }
 
         for op in ps.operator ?? [] {
             switch op.name {
             case "movement":
-                if let gravityStr = op.gravity {
-                    let (gx, gy, gz) = gravityStr.parseVector3()
-                    // WE Z-axis maps to SpriteKit Y acceleration (WE uses Z for depth/vertical)
+                if let gStr = op.gravity {
+                    let (gx, gy, gz) = gStr.parseVector3()
                     emitter.xAcceleration = CGFloat(gx)
-                    // In WE, positive Z gravity pulls "forward", map to Y-down in SK
-                    emitter.yAcceleration = CGFloat(-gz)
-                    if gy != 0 && gz == 0 {
-                        emitter.yAcceleration = CGFloat(-gy)
-                    }
+                    emitter.yAcceleration = CGFloat(gy != 0 && gz == 0 ? -gy : -gz)
                 }
-
             case "alphafade":
-                let fadeIn = op.fadeintime ?? 0
-                let fadeOut = op.fadeouttime ?? 1
-                // SpriteKit particleAlphaSpeed: rate of alpha change per second
-                // Approximate: particles fade in quickly and fade out over remaining lifetime
-                if fadeOut < 1.0 {
-                    emitter.particleAlphaSpeed = CGFloat(-1.0 / max(emitter.particleLifetime * CGFloat(1 - fadeOut), 0.1))
+                if let fo = op.fadeouttime, fo < 1.0 {
+                    emitter.particleAlphaSpeed = CGFloat(-1.0 / max(emitter.particleLifetime * CGFloat(1-fo), 0.1))
                 }
-                _ = fadeIn // Used implicitly through initial alpha ramp
-
-            default:
-                break
+            default: break
             }
         }
 
-        // Renderer: spritetrail gets elongated aspect ratio
         if let renderer = ps.renderer?.first, renderer.name == "spritetrail" {
-            let trailLength = CGFloat(renderer.maxlength ?? 50)
-            emitter.particleSize = CGSize(width: 2, height: trailLength)
-            // Align particles to movement direction
+            let len = CGFloat(renderer.maxlength ?? 50)
+            emitter.particleSize = CGSize(width: 2, height: len)
             emitter.particleRotation = emitter.emissionAngle
         }
 
@@ -324,133 +344,122 @@ class SceneWallpaperViewModel: ObservableObject {
             let (x, y, _) = originStr.parseVector3()
             emitter.position = CGPoint(x: x, y: sceneSize.height - y)
         }
-
         if let scaleStr = obj.scale {
             let (sx, sy, _) = scaleStr.parseVector3()
-            emitter.xScale = CGFloat(sx)
-            emitter.yScale = CGFloat(sy)
+            emitter.xScale = CGFloat(sx); emitter.yScale = CGFloat(sy)
         }
 
-        emitter.numParticlesToEmit = 0 // infinite
-
+        emitter.numParticlesToEmit = 0
         return emitter
     }
 
-    // MARK: - Asset Loading
+    // MARK: - Asset loading
 
-    private func loadJSON<T: Decodable>(path: String, wallpaperDir: URL) -> T? {
-        if let parser = pkgParser, let data = parser.extractFile(named: path) {
-            return try? JSONDecoder().decode(T.self, from: data)
-        }
-        let url = wallpaperDir.appending(path: path)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(T.self, from: data)
+    private enum TextureContent {
+        case image(NSImage)
+        case video(Data)
     }
 
-    private func loadTexture(named name: String, materialDir: String, wallpaperDir: URL) -> NSImage? {
-        // Build candidate .tex paths: relative to material dir, then relative to materials/ root
-        let materialDirPath = (materialDir as NSString).deletingLastPathComponent
+    private func loadTexture(named name: String, materialDir: String, dir: URL) -> TextureContent? {
+        let matDirPath = (materialDir as NSString).deletingLastPathComponent
         var texPaths = [String]()
-        if !materialDirPath.isEmpty {
-            texPaths.append("\(materialDirPath)/\(name).tex")
-        }
-        // Also try materials/{name}.tex for textures with embedded paths (e.g. "workshop/xxx/foo")
-        let materialsRoot = materialDirPath.split(separator: "/").first.map(String.init) ?? "materials"
-        let rootPath = "\(materialsRoot)/\(name).tex"
-        if !texPaths.contains(rootPath) {
-            texPaths.append(rootPath)
-        }
+        if !matDirPath.isEmpty { texPaths.append("\(matDirPath)/\(name).tex") }
+        let root = matDirPath.split(separator: "/").first.map(String.init) ?? "materials"
+        let rootPath = "\(root)/\(name).tex"
+        if !texPaths.contains(rootPath) { texPaths.append(rootPath) }
         texPaths.append("\(name).tex")
 
         for texPath in texPaths {
-            if let parser = pkgParser, let texData = parser.extractFile(named: texPath) {
-                Self.log("  TEX from PKG '\(texPath)' size=\(texData.count)")
-                let texParser = TEXParser(data: Data(texData))  // Copy to reset indices
-                if let image = texParser.extractImage() {
-                    return image
-                }
-                Self.log("  TEXParser.extractImage() returned nil for '\(texPath)'")
+            if let parser = pkgParser, let data = parser.extractFile(named: texPath) {
+                WELogger.shared.verbose("[SceneVM] TEX from PKG '\(texPath)' \(data.count)B")
+                let tex = TEXParser(data: Data(data))
+                if let mp4 = tex.extractVideoData() { return .video(mp4) }
+                if let img = tex.extractImage() { return .image(img) }
+                WELogger.shared.verbose("[SceneVM] TEXParser returned nil for '\(texPath)'")
             }
-
-            let texURL = wallpaperDir.appending(path: texPath)
-            if let texData = try? Data(contentsOf: texURL) {
-                let texParser = TEXParser(data: texData)
-                if let image = texParser.extractImage() {
-                    return image
-                }
+            let texURL = dir.appending(path: texPath)
+            if let data = try? Data(contentsOf: texURL) {
+                let tex = TEXParser(data: data)
+                if let mp4 = tex.extractVideoData() { return .video(mp4) }
+                if let img = tex.extractImage() { return .image(img) }
             }
         }
 
+        // Fallback: raw image file (png/jpg/gif)
         for ext in ["png", "jpg", "jpeg", "gif"] {
-            let imgPath = materialDirPath.isEmpty ? "\(name).\(ext)" : "\(materialDirPath)/\(name).\(ext)"
-            if let parser = pkgParser, let imgData = parser.extractFile(named: imgPath) {
-                if let image = NSImage(data: imgData) { return image }
-            }
-            let imgURL = wallpaperDir.appending(path: imgPath)
-            if let image = NSImage(contentsOf: imgURL) { return image }
+            let imgPath = matDirPath.isEmpty ? "\(name).\(ext)" : "\(matDirPath)/\(name).\(ext)"
+            if let parser = pkgParser, let data = parser.extractFile(named: imgPath),
+               let img = NSImage(data: data) { return .image(img) }
+            let imgURL = dir.appending(path: imgPath)
+            if let img = NSImage(contentsOf: imgURL) { return .image(img) }
         }
 
-        Self.log("  No texture found for '\(name)'")
+        WELogger.shared.verbose("[SceneVM] No texture found for '\(name)'")
         return nil
     }
 
-    /// Generate simple procedural textures for built-in particle names
-    private func generateProceduralTexture(named name: String) -> NSImage? {
-        let size: CGFloat = 32
-
-        switch name {
-        case "particle/drop":
-            // Elongated raindrop: bright center, soft edges
-            return generateRadialGradient(size: CGSize(width: 4, height: 16), color: .white)
-
-        case _ where name.contains("halo"):
-            // Soft circular glow
-            return generateRadialGradient(size: CGSize(width: size, height: size), color: .white)
-
-        default:
-            // Generic soft circle
-            return generateRadialGradient(size: CGSize(width: size, height: size), color: .white)
+    private func loadJSON<T: Decodable>(path: String, dir: URL) -> T? {
+        if let parser = pkgParser, let data = parser.extractFile(named: path) {
+            return try? JSONDecoder().decode(T.self, from: data)
         }
+        return (try? Data(contentsOf: dir.appending(path: path))).flatMap { try? JSONDecoder().decode(T.self, from: $0) }
+    }
+
+    private func loadPreviewImage(dir: URL) -> NSImage? {
+        for name in ["preview.jpg", "preview.png", "preview.gif"] {
+            if let img = NSImage(contentsOf: dir.appending(path: name)) { return img }
+        }
+        return nil
+    }
+
+    private func generateProceduralTexture(named name: String) -> NSImage? {
+        let size: CGSize
+        switch name {
+        case "particle/drop": size = CGSize(width: 4, height: 16)
+        default: size = CGSize(width: 32, height: 32)
+        }
+        return generateRadialGradient(size: size, color: .white)
     }
 
     private func generateRadialGradient(size: CGSize, color: NSColor) -> NSImage {
-        let image = NSImage(size: size)
-        image.lockFocus()
-
+        let img = NSImage(size: size)
+        img.lockFocus()
         let ctx = NSGraphicsContext.current!.cgContext
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        // Convert to RGB color space to guarantee 4 components (r, g, b, a)
-        let rgbColor = color.usingColorSpace(.deviceRGB) ?? color
-        let r = rgbColor.redComponent
-        let g = rgbColor.greenComponent
-        let b = rgbColor.blueComponent
-        let a = rgbColor.alphaComponent
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let rgb = color.usingColorSpace(.deviceRGB) ?? color
         let colors = [
-            CGColor(colorSpace: colorSpace, components: [r, g, b, a])!,
-            CGColor(colorSpace: colorSpace, components: [r, g, b, 0])!
+            CGColor(colorSpace: cs, components: [rgb.redComponent, rgb.greenComponent, rgb.blueComponent, rgb.alphaComponent])!,
+            CGColor(colorSpace: cs, components: [rgb.redComponent, rgb.greenComponent, rgb.blueComponent, 0])!
         ] as CFArray
-        let gradient = CGGradient(colorsSpace: colorSpace, colors: colors, locations: [0, 1])!
-
-        let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        let radius = min(size.width, size.height) / 2
-        ctx.drawRadialGradient(gradient, startCenter: center, startRadius: 0,
-                               endCenter: center, endRadius: radius, options: [])
-
-        image.unlockFocus()
-        return image
+        let grad = CGGradient(colorsSpace: cs, colors: colors, locations: [0, 1])!
+        let center = CGPoint(x: size.width/2, y: size.height/2)
+        ctx.drawRadialGradient(grad, startCenter: center, startRadius: 0,
+                               endCenter: center, endRadius: min(size.width, size.height)/2, options: [])
+        img.unlockFocus()
+        return img
     }
 
-    // MARK: - System Events
+    // MARK: - System events
 
     @objc func systemWillSleep(_ notification: Notification) {
         skScene?.isPaused = true
+        videoPlayers.forEach { $0.pause() }
+        audioPlayers.forEach { $0.pause() }
     }
 
     @objc func systemDidWake(_ notification: Notification) {
         skScene?.isPaused = false
+        let rate = AppDelegate.shared.wallpaperViewModel.playRate
+        if rate > 0 {
+            videoPlayers.forEach { $0.play() }
+            audioPlayers.forEach { $0.play() }
+        }
     }
 
     @objc func spaceDidChange(_ notification: Notification) {
+        guard AppDelegate.shared.wallpaperViewModel.playRate > 0 else { return }
         skScene?.isPaused = false
+        // Kick video nodes in case Stage Manager froze them
+        videoPlayers.forEach { $0.play() }
     }
 }

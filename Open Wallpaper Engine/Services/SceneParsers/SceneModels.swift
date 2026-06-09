@@ -85,11 +85,18 @@ struct WESceneObject: Codable {
     var particle: String?    // path to particle JSON
     var instanceoverride: WEInstanceOverride?
 
+    // Sound objects
+    var sound: [String]?     // array of audio file paths
+
+    // Post-process effects applied to this layer
+    var effects: [WEEffect]?
+
     enum CodingKeys: String, CodingKey {
         case id, name, origin, scale, angles, visible
         case image, alpha, brightness, color, colorBlendMode, size, alignment
         case solid, copybackground, parallaxDepth, perspective
         case particle, instanceoverride
+        case sound, effects
     }
 
     init(from decoder: Decoder) throws {
@@ -100,6 +107,8 @@ struct WESceneObject: Codable {
         image = try? c.decodeIfPresent(String.self, forKey: .image)
         particle = try? c.decodeIfPresent(String.self, forKey: .particle)
         instanceoverride = try? c.decodeIfPresent(WEInstanceOverride.self, forKey: .instanceoverride)
+        sound = try? c.decodeIfPresent([String].self, forKey: .sound)
+        effects = try? c.decodeIfPresent([WEEffect].self, forKey: .effects)
 
         // Fields that may be simple values or {"script":..,"value":..} objects
         origin = try? c.decodeIfPresent(String.self, forKey: .origin)
@@ -153,6 +162,10 @@ struct WEScriptValue: Codable {
 struct WEModel: Codable {
     var autosize: Bool?
     var material: String?    // path to material JSON
+    var fullscreen: Bool?
+    var width: Int?
+    var height: Int?
+    var puppet: String?
 }
 
 struct WEMaterial: Codable {
@@ -162,10 +175,19 @@ struct WEMaterial: Codable {
 struct WEMaterialPass: Codable {
     var blending: String?    // "translucent", "additive"
     var shader: String?
-    var textures: [String]?
+    var textures: [String?]? // nullable entries = unbound texture slots
+    var combos: [String: Int]?
     var cullmode: String?
     var depthtest: String?
     var depthwrite: String?
+}
+
+// Effect applied to a scene object (post-process pass referencing an effect JSON file)
+struct WEEffect: Codable {
+    var id: Int?
+    var name: String?
+    var file: String?    // path to effect.json
+    var visible: Bool?
 }
 
 // MARK: - Particle System
