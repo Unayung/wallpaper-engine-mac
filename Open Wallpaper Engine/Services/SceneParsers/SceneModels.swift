@@ -172,11 +172,40 @@ struct WEMaterial: Codable {
     var passes: [WEMaterialPass]?
 }
 
+// WE shader constant value — scalar number or vector (e.g. "g_Color": [1,0,0,1])
+enum WEShaderValue: Codable {
+    case number(Double)
+    case vector([Double])
+
+    var doubleValue: Double? {
+        switch self {
+        case .number(let n): return n
+        case .vector(let v): return v.first
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if let n = try? c.decode(Double.self) { self = .number(n); return }
+        if let v = try? c.decode([Double].self) { self = .vector(v); return }
+        self = .number(0)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .number(let n): try c.encode(n)
+        case .vector(let v): try c.encode(v)
+        }
+    }
+}
+
 struct WEMaterialPass: Codable {
     var blending: String?    // "translucent", "additive"
     var shader: String?
     var textures: [String?]? // nullable entries = unbound texture slots
     var combos: [String: Int]?
+    var constantshadervalues: [String: WEShaderValue]?
     var cullmode: String?
     var depthtest: String?
     var depthwrite: String?

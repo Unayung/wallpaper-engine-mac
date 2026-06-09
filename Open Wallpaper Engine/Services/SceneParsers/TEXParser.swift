@@ -256,14 +256,18 @@ class TEXParser {
     }
 
     private func rgb565(_ c: UInt16) -> [UInt8] {
-        [UInt8(((c>>11)&0x1F)*255/31), UInt8(((c>>5)&0x3F)*255/63), UInt8((c&0x1F)*255/31), 255]
+        let r = UInt8(((c >> 11) & 0x1F) * 255 / 31)
+        let g = UInt8(((c >>  5) & 0x3F) * 255 / 63)
+        let b = UInt8( (c        & 0x1F) * 255 / 31)
+        return [r, g, b, 255]
     }
 
     // Lerp: result = a*(d-n)/d + b*n/d, integer rounding
     private func blend(_ a: [UInt8], _ b: [UInt8], _ n: Int, _ d: Int) -> [UInt8] {
-        [UInt8((Int(a[0])*(d-n)+Int(b[0])*n+(d/2))/d),
-         UInt8((Int(a[1])*(d-n)+Int(b[1])*n+(d/2))/d),
-         UInt8((Int(a[2])*(d-n)+Int(b[2])*n+(d/2))/d), 255]
+        let r = UInt8((Int(a[0])*(d-n) + Int(b[0])*n + d/2) / d)
+        let g = UInt8((Int(a[1])*(d-n) + Int(b[1])*n + d/2) / d)
+        let b_ = UInt8((Int(a[2])*(d-n) + Int(b[2])*n + d/2) / d)
+        return [r, g, b_, 255]
     }
 
     // MARK: - LZ4 raw-block decompression

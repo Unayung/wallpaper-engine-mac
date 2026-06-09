@@ -161,25 +161,28 @@ class SceneWallpaperViewModel: ObservableObject {
         let nodePos: CGPoint
         if let originStr = obj.origin {
             let (x, y, _) = originStr.parseVector3()
-            nodePos = CGPoint(x: x, y: sceneSize.height - y)
+            // WE world space: (0,0) at screen center, Y-up.
+            // SpriteKit: (0,0) at bottom-left, Y-up. Add half-scene offset.
+            nodePos = CGPoint(x: x + sceneSize.width/2, y: y + sceneSize.height/2)
         } else {
             nodePos = CGPoint(x: sceneSize.width/2, y: sceneSize.height/2)
         }
 
         // Try loading the texture — could be static image or embedded video
+        let pass = material?.passes?.first
         guard let tex = loadTexture(named: textureName, materialDir: materialPath, dir: dir) else { return nil }
         switch tex {
         case .image(let image):
-            return buildSpriteNode(image: image, obj: obj, size: nodeSize, position: nodePos,
-                                   blending: material?.passes?.first?.blending)
+            return buildSpriteNode(image: image, obj: obj, size: nodeSize, position: nodePos, pass: pass)
         case .video(let mp4Data):
             return buildVideoNode(mp4Data: mp4Data, size: nodeSize, position: nodePos)
         }
     }
 
     private func buildSpriteNode(image: NSImage, obj: WESceneObject, size: CGSize,
-                                  position: CGPoint, blending: String?) -> SKSpriteNode {
-        let node = SKSpriteNode(texture: SKTexture(image: image))
+                                  position: CGPoint, pass: WEMaterialPass?) -> SKSpriteNode {
+        let base = SKTexture(image: image)
+        let node = SKSpriteNode(texture: base)
         node.size = size
         node.position = position
         node.alpha = CGFloat(obj.alpha ?? 1.0)
@@ -190,12 +193,34 @@ class SceneWallpaperViewModel: ObservableObject {
             node.colorBlendFactor = (obj.colorBlendMode ?? 0) > 0 ? 1.0 : 0.0
         }
 
-        switch blending {
+        switch pass?.blending {
         case "additive": node.blendMode = .add
         default: node.blendMode = .alpha
         }
 
+        // Sprite-sheet animation: WE uses horizontal strips when SPRITE/ANIMATION combo is set
+        if let combos = pass?.combos,
+           (combos["SPRITE"] != nil || combos["ANIMATION"] != nil),
+           let frameVal = pass?.constantshadervalues?["g_Frames"]?.doubleValue {
+            let frames = Int(frameVal)
+            if frames > 1 {
+                let fps = pass?.constantshadervalues?["g_FrameRate"]?.doubleValue ?? 24.0
+                node.run(spriteAnimation(base: base, frames: frames, fps: fps))
+            }
+        }
+
         return node
+    }
+
+    private func spriteAnimation(base: SKTexture, frames: Int, fps: Double) -> SKAction {
+        let fw = 1.0 / CGFloat(frames)
+        var textures = [SKTexture]()
+        for i in 0..<frames {
+            let rect = CGRect(x: CGFloat(i) * fw, y: 0, width: fw, height: 1)
+            textures.append(SKTexture(rect: rect, in: base))
+        }
+        let tpf = max(1.0/60.0, 1.0/fps)
+        return SKAction.repeatForever(.animate(with: textures, timePerFrame: tpf))
     }
 
     private func buildVideoNode(mp4Data: Data, size: CGSize, position: CGPoint) -> SKVideoNode? {
@@ -342,7 +367,7 @@ class SceneWallpaperViewModel: ObservableObject {
 
         if let originStr = obj.origin {
             let (x, y, _) = originStr.parseVector3()
-            emitter.position = CGPoint(x: x, y: sceneSize.height - y)
+            emitter.position = CGPoint(x: x + sceneSize.width/2, y: y + sceneSize.height/2)
         }
         if let scaleStr = obj.scale {
             let (sx, sy, _) = scaleStr.parseVector3()
