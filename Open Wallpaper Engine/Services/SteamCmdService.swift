@@ -258,17 +258,40 @@ class SteamCmdService: ObservableObject {
                         self?.downloadProgress[workshopId] = .downloading(status: status)
                     }
                 }
+
+                // steamcmd on macOS frequently hangs after the download finishes instead of
+                // exiting on +quit (thread-race during Steam API teardown). The files are already
+                // on disk once the success line prints, so terminate it ourselves — otherwise
+                // waitUntilExit() below blocks forever and the UI stays on "Requesting download...".
+                if line.contains("Downloaded item") {
+                    process.terminate()
+                }
             }
 
             do {
                 try process.run()
-                process.waitUntilExit()
             } catch {
                 handle.readabilityHandler = nil
                 DispatchQueue.main.async {
                     self.downloadProgress[workshopId] = .failed("steamcmd failed to run: \(error.localizedDescription)")
                 }
                 return
+            }
+
+            // Bound the wait: the success-line handler above terminates steamcmd once the item
+            // is downloaded, but this timeout is the last-resort backstop for a process that
+            // stalls before ever printing success (e.g. a network hang), so it can never block
+            // the download indefinitely.
+            let deadline = DispatchTime.now() + 600
+            let exitGroup = DispatchGroup()
+            exitGroup.enter()
+            DispatchQueue.global().async {
+                process.waitUntilExit()
+                exitGroup.leave()
+            }
+            if exitGroup.wait(timeout: deadline) == .timedOut {
+                process.terminate()
+                _ = exitGroup.wait(timeout: .now() + 5)
             }
 
             handle.readabilityHandler = nil
