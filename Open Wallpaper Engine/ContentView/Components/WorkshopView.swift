@@ -197,6 +197,14 @@ private struct WorkshopBrowserView: View {
         VStack(spacing: 8) {
             // Search bar
             HStack {
+                Button {
+                    viewModel.importSubscriptions()
+                } label: {
+                    Label("Import Subscriptions", systemImage: "tray.and.arrow.down")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(viewModel.steamCmd.isImportingSubscriptions)
+
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
                 TextField("Search wallpapers...", text: $viewModel.searchText)
@@ -232,6 +240,19 @@ private struct WorkshopBrowserView: View {
             .background(Color(nsColor: .controlBackgroundColor))
             .cornerRadius(8)
             .padding(.horizontal)
+
+            if viewModel.steamCmd.isImportingSubscriptions || viewModel.steamCmd.subscriptionImportStatus != nil {
+                HStack(spacing: 8) {
+                    if viewModel.steamCmd.isImportingSubscriptions {
+                        ProgressView().controlSize(.mini)
+                    }
+                    Text(viewModel.steamCmd.subscriptionImportStatus ?? "Importing subscriptions...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal)
+            }
 
             // Tag filters
             ScrollView(.horizontal, showsIndicators: false) {

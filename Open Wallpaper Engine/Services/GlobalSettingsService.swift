@@ -49,6 +49,11 @@ enum GSVideoFramework: String, CaseIterable, Identifiable, Codable {
     case avkit
 }
 
+enum GSWallpaperScaling: String, CaseIterable, Identifiable, Codable {
+    var id: Self { self }
+    case fill, fit, stretch
+}
+
 enum GSProcessPiority: String, CaseIterable, Identifiable, Codable {
     var id: Self { self }
     case normal, belowNormal
@@ -94,6 +99,7 @@ struct GlobalSettings: Codable, Equatable {
     
     // MARK: Video
     var videoFramework = GSVideoFramework.avkit
+    var wallpaperScaling = GSWallpaperScaling.fill
     
     // MARK: Advanced
     var processPiority = GSProcessPiority.normal // Not putting in use

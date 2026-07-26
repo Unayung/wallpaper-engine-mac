@@ -8,6 +8,8 @@ class SteamCmdService: ObservableObject {
     @Published var loginError: String?
     @Published var isLoggingIn = false
     @Published var downloadProgress: [String: DownloadState] = [:]
+    @Published var isImportingSubscriptions = false
+    @Published var subscriptionImportStatus: String?
 
     enum DownloadState: Equatable {
         case downloading(status: String)
@@ -318,6 +320,80 @@ class SteamCmdService: ObservableObject {
         }
     }
 
+    /// Import Wallpaper Engine items already downloaded by the Steam client.
+    /// If an item is subscribed but not downloaded locally yet, queue steamcmd to download it.
+    func importSubscribedWorkshopItems() {
+        guard !isImportingSubscriptions else { return }
+
+        isImportingSubscriptions = true
+        subscriptionImportStatus = "Scanning Steam subscriptions..."
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+
+            let steamAppsDir = self.findSteamAppsDir()
+            let manifestURL = steamAppsDir?.appending(path: "workshop/appworkshop_431960.acf")
+            let contentDir = steamAppsDir?.appending(path: "workshop/content/431960")
+
+            guard let manifestURL,
+                  let contentDir,
+                  let manifest = try? String(contentsOf: manifestURL, encoding: .utf8) else {
+                DispatchQueue.main.async {
+                    self.subscriptionImportStatus = "Steam subscription manifest not found."
+                    self.isImportingSubscriptions = false
+                }
+                return
+            }
+
+            let ids = self.parseWorkshopIds(from: manifest)
+            guard !ids.isEmpty else {
+                DispatchQueue.main.async {
+                    self.subscriptionImportStatus = "No Wallpaper Engine subscriptions found."
+                    self.isImportingSubscriptions = false
+                }
+                return
+            }
+
+            var imported = 0
+            var skipped = 0
+            var queued = 0
+            var failed = 0
+            let fm = FileManager.default
+
+            for id in ids {
+                let source = contentDir.appending(path: id)
+                let dest = fm.wallpapersDirectory.appending(path: id)
+
+                if fm.fileExists(atPath: source.path) {
+                    do {
+                        if fm.fileExists(atPath: dest.path) {
+                            if self.isValidWallpaperDirectory(dest) {
+                                skipped += 1
+                                continue
+                            }
+                            try fm.removeItem(at: dest)
+                        }
+                        try fm.copyItem(at: source, to: dest)
+                        imported += 1
+                    } catch {
+                        failed += 1
+                    }
+                } else if self.isLoggedIn {
+                    queued += 1
+                    DispatchQueue.main.async {
+                        self.downloadWorkshopItem(workshopId: id)
+                    }
+                }
+            }
+
+            DispatchQueue.main.async {
+                self.subscriptionImportStatus = "Imported \(imported), skipped \(skipped), queued \(queued), failed \(failed)."
+                self.isImportingSubscriptions = false
+                AppDelegate.shared.contentViewModel.refresh()
+            }
+        }
+    }
+
     /// Parse steamcmd output lines into human-readable progress.
     private func parseProgress(_ output: String) -> String? {
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -352,19 +428,21 @@ class SteamCmdService: ObservableObject {
         return nil
     }
 
-    private func findSteamAppsDir(cmdPath: String) -> URL? {
+    private func findSteamAppsDir(cmdPath: String? = nil) -> URL? {
         // steamcmd typically stores downloads relative to its install location
-        let cmdURL = URL(fileURLWithPath: cmdPath)
+        let cmdURL = cmdPath.map { URL(fileURLWithPath: $0) }
 
         // Homebrew: /opt/homebrew/Cellar/steamcmd/...  -> steamapps at ~/Library/Application Support/Steam
         // Manual: wherever steamcmd is -> steamapps in same dir
-        let possiblePaths = [
-            cmdURL.deletingLastPathComponent().appending(path: "steamapps"),
+        var possiblePaths = [
             FileManager.default.homeDirectoryForCurrentUser
                 .appending(path: "Library/Application Support/Steam/steamapps"),
             FileManager.default.homeDirectoryForCurrentUser
                 .appending(path: "Steam/steamapps"),
         ]
+        if let cmdURL {
+            possiblePaths.insert(cmdURL.deletingLastPathComponent().appending(path: "steamapps"), at: 0)
+        }
 
         for path in possiblePaths {
             if FileManager.default.fileExists(atPath: path.path) {
@@ -372,5 +450,24 @@ class SteamCmdService: ObservableObject {
             }
         }
         return nil
+    }
+
+    private func parseWorkshopIds(from manifest: String) -> [String] {
+        let pattern = "\"(\\d{6,})\"\\s*\\{"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(manifest.startIndex..<manifest.endIndex, in: manifest)
+        let ids = regex.matches(in: manifest, range: range).compactMap { match -> String? in
+            guard let idRange = Range(match.range(at: 1), in: manifest) else { return nil }
+            let id = String(manifest[idRange])
+            return id == "\(WorkshopAPIService.wallpaperEngineAppId)" ? nil : id
+        }
+        return Array(Set(ids)).sorted()
+    }
+
+    private func isValidWallpaperDirectory(_ url: URL) -> Bool {
+        guard let data = try? Data(contentsOf: url.appending(path: "project.json")) else {
+            return false
+        }
+        return (try? JSONDecoder().decode(WEProject.self, from: data)) != nil
     }
 }

@@ -73,24 +73,23 @@ Scene wallpapers (the most common type on Steam Workshop) were completely unimpl
 
 **New implementation includes:**
 - **PKG parser** — Reads Wallpaper Engine's PKGV archive format to extract scene.json, models, materials, and textures
-- **TEX parser** — Reads TEXV0005 texture containers, extracts embedded JPEG/PNG image data from TEXI/TEXB sections
+- **TEX parser** — Reads TEXV0005 texture containers, extracts embedded JPEG/PNG image data, and decodes DXT1/DXT5 compressed payloads from TEXI/TEXB sections
 - **Scene JSON decoder** — Parses scene.json with flexible decoding that handles Wallpaper Engine's polymorphic fields (values can be plain types or `{"script":..,"value":..}` objects)
 - **SpriteKit renderer** — Renders scene image layers as SKSpriteNodes with correct positioning, sizing, alpha, color tinting, and blend modes
+- **Particle rendering** — Maps common scene particle systems (rain, snow, sparkles) to SpriteKit emitters
+- **Mouse parallax** — Moves scene layers with `parallaxDepth` in response to mouse position
 - **Preview fallback** — Falls back to preview.jpg/png/gif when textures can't be extracted
-- **TEXI format detection** — Quickly identifies and skips DXT-compressed textures that can't be decoded
+- **TEX format inference** — Detects explicitly tagged DXT textures and some misidentified TEXB format 1 compressed payloads
 
 ### Import — Fixed folder import
 The import panel now correctly handles both individual wallpaper folders and parent directories containing multiple wallpapers.
 
 ## Current Limitations
 
-- **DXT textures** — Wallpapers using DXT1/DXT5 compressed textures (TEXI format 4/7/8) cannot be rendered. These are GPU-native compressed formats that require either a software decompressor or Metal-based rendering. The app falls back to the preview image for these wallpapers.
-- **Particle effects** — Scene particle systems (rain, snow, sparkles) are parsed but disabled in rendering to avoid visual artifacts. The particle mapping code exists but needs refinement.
 - **Audio-reactive scripts** — Wallpaper Engine's JavaScript-based audio visualization scripts are not executed. Properties with scripts fall back to their static `value`.
 - **Shader effects** — Custom GLSL shaders (bloom, blur, color correction) are not applied.
-- **Camera parallax** — Mouse-tracking camera movement is not implemented.
 - **Animated scenes** — Sprite animations and timeline-based object animations are not supported.
-- **Some JPEG thumbnails** — A small number of TEXB format 1 files contain non-standard JPEG data that macOS cannot decode. These are typically DXT-compressed textures misidentified as format 1.
+- **Complex particles** — Common particle emitters are rendered, but specialized Wallpaper Engine particle operators may only be approximated.
 
 ## Supported Wallpaper Types
 
@@ -99,8 +98,8 @@ The import panel now correctly handles both individual wallpaper folders and par
 | Video (.mp4, .webm) | Working (original) |
 | Web (HTML/WebGL) | Working (patched) |
 | Scene (static images) | Working (new) |
-| Scene (particles) | Partial (disabled) |
-| Scene (DXT textures) | Preview fallback |
+| Scene (particles) | Partial (rendered with SpriteKit approximations) |
+| Scene (DXT textures) | Working (software decoded) |
 | Application | Not supported |
 
 ## Build from Source

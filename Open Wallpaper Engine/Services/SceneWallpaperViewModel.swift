@@ -24,6 +24,7 @@ class SceneWallpaperViewModel: ObservableObject {
     @Published var skScene: SKScene?
 
     private var pkgParser: PKGParser?
+    private(set) var hasParallaxNodes = false
 
     init(wallpaper: WEWallpaper) {
         self.currentWallpaper = wallpaper
@@ -80,6 +81,7 @@ class SceneWallpaperViewModel: ObservableObject {
             return
         }
 
+        hasParallaxNodes = false
         Self.log("Scene loaded: \(scene.objects.count) objects from \(sceneFile)")
         let skScene = buildSKScene(from: scene, wallpaperDir: dir)
         Self.log("SKScene built: \(skScene.children.count) children")
@@ -93,7 +95,7 @@ class SceneWallpaperViewModel: ObservableObject {
     private func buildSKScene(from scene: WEScene, wallpaperDir: URL) -> SKScene {
         let projection = scene.general.orthogonalprojection ?? WEOrthogonalProjection(width: 1920, height: 1080)
         let skScene = SKScene(size: CGSize(width: projection.width, height: projection.height))
-        skScene.scaleMode = .aspectFill
+        skScene.scaleMode = Self.spriteKitScaleMode()
 
         // Background color from clearcolor
         if let colorStr = scene.general.clearcolor {
@@ -101,7 +103,8 @@ class SceneWallpaperViewModel: ObservableObject {
             skScene.backgroundColor = NSColor(red: c.r, green: c.g, blue: c.b, alpha: 1.0)
         }
 
-        // Show only the base background image (no effects/particles/additive layers)
+        // Show base image layers first. Additive image layers are still skipped because
+        // most of them are shader/effect passes that SpriteKit cannot reproduce yet.
         var hasImage = false
         for obj in scene.objects {
             guard obj.visible != false, obj.image != nil else { continue }
@@ -110,6 +113,13 @@ class SceneWallpaperViewModel: ObservableObject {
                 if node.blendMode == .add { continue }
                 skScene.addChild(node)
                 hasImage = true
+            }
+        }
+
+        for obj in scene.objects {
+            guard obj.visible != false, obj.particle != nil else { continue }
+            if let node = buildParticleNode(obj, wallpaperDir: wallpaperDir, sceneSize: skScene.size) {
+                skScene.addChild(node)
             }
         }
 
@@ -125,6 +135,36 @@ class SceneWallpaperViewModel: ObservableObject {
         }
 
         return skScene
+    }
+
+    static func spriteKitScaleMode() -> SKSceneScaleMode {
+        switch AppDelegate.shared.globalSettingsViewModel.settings.wallpaperScaling {
+        case .fill:
+            return .aspectFill
+        case .fit:
+            return .aspectFit
+        case .stretch:
+            return .resizeFill
+        }
+    }
+
+    func updateParallax(normalizedMouse: CGPoint) {
+        guard hasParallaxNodes, let skScene else { return }
+
+        for node in skScene.children {
+            guard let userData = node.userData,
+                  let depth = userData["parallaxDepth"] as? CGFloat,
+                  let baseX = userData["baseX"] as? CGFloat,
+                  let baseY = userData["baseY"] as? CGFloat else {
+                continue
+            }
+
+            let offset = depth * 48
+            node.position = CGPoint(
+                x: baseX - normalizedMouse.x * offset,
+                y: baseY + normalizedMouse.y * offset
+            )
+        }
     }
 
     private func loadPreviewImage(wallpaperDir: URL) -> NSImage? {
@@ -200,6 +240,15 @@ class SceneWallpaperViewModel: ObservableObject {
             }
         }
 
+        if let depth = obj.parallaxDepth?.parseParallaxDepth(), depth != 0 {
+            let data = NSMutableDictionary()
+            data["baseX"] = node.position.x
+            data["baseY"] = node.position.y
+            data["parallaxDepth"] = CGFloat(depth)
+            node.userData = data
+            hasParallaxNodes = true
+        }
+
         return node
     }
 
@@ -215,11 +264,17 @@ class SceneWallpaperViewModel: ObservableObject {
         }
 
         let emitter = SKEmitterNode()
+        var materialTextureName: String?
+        var isAdditiveParticle = false
+        var hasAlphaInitializer = false
+        var hasColorInitializer = false
+        var usesLargeAdditiveParticles = false
 
         // Particle texture from material
         if let materialPath = ps.material {
             let material: WEMaterial? = loadJSON(path: materialPath, wallpaperDir: wallpaperDir)
             if let texName = material?.passes?.first?.textures?.first {
+                materialTextureName = texName
                 let texImage = loadTexture(named: texName, materialDir: materialPath, wallpaperDir: wallpaperDir)
                     ?? generateProceduralTexture(named: texName)
                 if let img = texImage {
@@ -229,7 +284,8 @@ class SceneWallpaperViewModel: ObservableObject {
 
             // Blend mode
             if let blending = material?.passes?.first?.blending {
-                emitter.particleBlendMode = blending == "additive" ? .add : .alpha
+                isAdditiveParticle = blending == "additive"
+                emitter.particleBlendMode = isAdditiveParticle ? .add : .alpha
             }
         }
 
@@ -261,11 +317,18 @@ class SceneWallpaperViewModel: ObservableObject {
             case "sizerandom":
                 let minSize = ini.min?.doubleValue ?? 1
                 let maxSize = ini.max?.doubleValue ?? 1
-                let avgSize = (minSize + maxSize) / 2
+                var avgSize = (minSize + maxSize) / 2
+                if isAdditiveParticle, avgSize > 128 {
+                    usesLargeAdditiveParticles = true
+                    avgSize = min(avgSize, 96)
+                }
                 // Apply instance override size
                 let sizeMultiplier = obj.instanceoverride?.size ?? 1.0
                 emitter.particleSize = CGSize(width: avgSize * sizeMultiplier, height: avgSize * sizeMultiplier)
-                emitter.particleScaleRange = CGFloat((maxSize - minSize) / avgSize) * CGFloat(sizeMultiplier)
+                if avgSize > 0 {
+                    let rawRange = CGFloat((maxSize - minSize) / avgSize) * CGFloat(sizeMultiplier)
+                    emitter.particleScaleRange = usesLargeAdditiveParticles ? min(rawRange, 0.35) : rawRange
+                }
 
             case "velocityrandom":
                 let minV = ini.min?.vectorValue ?? (0, 0, 0)
@@ -284,12 +347,14 @@ class SceneWallpaperViewModel: ObservableObject {
                 }
 
             case "alpharandom":
+                hasAlphaInitializer = true
                 let minA = ini.min?.doubleValue ?? 1
                 let maxA = ini.max?.doubleValue ?? 1
                 emitter.particleAlpha = CGFloat((minA + maxA) / 2)
                 emitter.particleAlphaRange = CGFloat(maxA - minA)
 
             case "colorrandom":
+                hasColorInitializer = true
                 if let maxColor = ini.max?.vectorValue {
                     // Colors in WE particles are 0-255
                     emitter.particleColor = NSColor(
@@ -330,9 +395,29 @@ class SceneWallpaperViewModel: ObservableObject {
                 }
                 _ = fadeIn // Used implicitly through initial alpha ramp
 
+            case "colorchange":
+                if !hasColorInitializer, let startColor = op.startvalue?.vectorValue {
+                    emitter.particleColor = Self.particleColor(from: startColor)
+                    hasColorInitializer = true
+                }
+
             default:
                 break
             }
+        }
+
+        if !hasColorInitializer, let materialTextureName {
+            emitter.particleColor = Self.fallbackParticleColor(for: materialTextureName)
+        }
+
+        if isAdditiveParticle, usesLargeAdditiveParticles {
+            emitter.particleBirthRate = min(emitter.particleBirthRate, 4)
+            if !hasAlphaInitializer {
+                emitter.particleAlpha = 0.18
+                emitter.particleAlphaRange = 0.06
+            }
+        } else if isAdditiveParticle, !hasAlphaInitializer {
+            emitter.particleAlpha = min(emitter.particleAlpha, 0.6)
         }
 
         // Renderer: spritetrail gets elongated aspect ratio
@@ -434,9 +519,18 @@ class SceneWallpaperViewModel: ObservableObject {
             // Elongated raindrop: bright center, soft edges
             return generateRadialGradient(size: CGSize(width: 4, height: 16), color: .white)
 
+        case _ where name.contains("fire"):
+            return generateRadialGradient(
+                size: CGSize(width: size, height: size),
+                color: NSColor(red: 1.0, green: 0.42, blue: 0.12, alpha: 0.45)
+            )
+
         case _ where name.contains("halo"):
             // Soft circular glow
-            return generateRadialGradient(size: CGSize(width: size, height: size), color: .white)
+            return generateRadialGradient(
+                size: CGSize(width: size, height: size),
+                color: NSColor(red: 1.0, green: 0.88, blue: 0.58, alpha: 0.35)
+            )
 
         default:
             // Generic soft circle
@@ -469,6 +563,26 @@ class SceneWallpaperViewModel: ObservableObject {
 
         image.unlockFocus()
         return image
+    }
+
+    private static func particleColor(from vector: (Double, Double, Double)) -> NSColor {
+        let divisor = max(vector.0, vector.1, vector.2) > 1.0 ? 255.0 : 1.0
+        return NSColor(
+            red: min(max(vector.0 / divisor, 0), 1),
+            green: min(max(vector.1 / divisor, 0), 1),
+            blue: min(max(vector.2 / divisor, 0), 1),
+            alpha: 1.0
+        )
+    }
+
+    private static func fallbackParticleColor(for textureName: String) -> NSColor {
+        if textureName.contains("fire") {
+            return NSColor(red: 1.0, green: 0.48, blue: 0.16, alpha: 1.0)
+        }
+        if textureName.contains("halo") {
+            return NSColor(red: 1.0, green: 0.9, blue: 0.65, alpha: 1.0)
+        }
+        return .white
     }
 
     // MARK: - System Events

@@ -65,6 +65,11 @@ struct GeneralPage: SettingsPage {
                 Picker("Video Framework", selection: $viewModel.settings.videoFramework) {
                     Text("Apple AVKit").tag(GSVideoFramework.avkit)
                 }
+                Picker("Wallpaper Fit", selection: $viewModel.settings.wallpaperScaling) {
+                    Text("Fill Screen").tag(GSWallpaperScaling.fill)
+                    Text("Fit Inside").tag(GSWallpaperScaling.fit)
+                    Text("Stretch").tag(GSWallpaperScaling.stretch)
+                }
             } header: {
                 Label("Video", systemImage: "film")
             }

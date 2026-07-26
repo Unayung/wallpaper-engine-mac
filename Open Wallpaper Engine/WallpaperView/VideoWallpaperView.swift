@@ -25,8 +25,7 @@ struct VideoWallpaperView: NSViewRepresentable {
 
         view.player = viewModel.player
 
-        // make the video boundary extends to fit the full screen without black background border
-        view.videoGravity = .resizeAspectFill
+        view.videoGravity = Self.videoGravity()
 
         // hide any unneeded ui component, we want just the video output
         view.controlsStyle = .none
@@ -50,5 +49,17 @@ struct VideoWallpaperView: NSViewRepresentable {
 
         viewModel.playRate = wallpaperViewModel.playRate
         viewModel.playVolume = wallpaperViewModel.playVolume
+        nsView.videoGravity = Self.videoGravity()
+    }
+
+    private static func videoGravity() -> AVLayerVideoGravity {
+        switch AppDelegate.shared.globalSettingsViewModel.settings.wallpaperScaling {
+        case .fill:
+            return .resizeAspectFill
+        case .fit:
+            return .resizeAspect
+        case .stretch:
+            return .resize
+        }
     }
 }

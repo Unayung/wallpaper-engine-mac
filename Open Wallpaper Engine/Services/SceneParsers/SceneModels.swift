@@ -248,6 +248,8 @@ struct WEParticleOperator: Codable {
     var drag: Double?
     var fadeintime: Double?
     var fadeouttime: Double?
+    var startvalue: WEFlexValue?
+    var endvalue: WEFlexValue?
 }
 
 struct WEParticleRenderer: Codable {
@@ -283,5 +285,21 @@ extension String {
     func parseColor() -> (r: Double, g: Double, b: Double) {
         let v = self.parseVector3()
         return (r: v.0, g: v.1, b: v.2)
+    }
+
+    /// Parse Wallpaper Engine parallax depth, which appears as either a number
+    /// string or a vector-like string depending on the asset exporter.
+    func parseParallaxDepth() -> Double {
+        if let value = Double(self) {
+            return value
+        }
+        let vector = self.parseVector3()
+        if vector.2 != 0 {
+            return vector.2
+        }
+        if vector.1 != 0 {
+            return vector.1
+        }
+        return vector.0
     }
 }

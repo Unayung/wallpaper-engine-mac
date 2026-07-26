@@ -84,6 +84,13 @@ class WorkshopViewModel: ObservableObject {
         steamCmd.downloadWorkshopItem(workshopId: item.id)
     }
 
+    func importSubscriptions() {
+        steamCmd.importSubscribedWorkshopItems()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            AppDelegate.shared.contentViewModel.refresh()
+        }
+    }
+
     func downloadState(for item: WorkshopItem) -> SteamCmdService.DownloadState? {
         steamCmd.downloadProgress[item.id]
     }
