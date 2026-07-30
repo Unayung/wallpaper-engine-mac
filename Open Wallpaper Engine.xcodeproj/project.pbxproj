@@ -62,6 +62,12 @@
 		CC0000000000000000000007 /* WorkshopAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000000000000000008 /* WorkshopAPIService.swift */; };
 		CC0000000000000000000009 /* WorkshopViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC000000000000000000000A /* WorkshopViewModel.swift */; };
 		CC000000000000000000000B /* WorkshopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC000000000000000000000C /* WorkshopView.swift */; };
+		DD0000000000000000000002 /* MobBehavior.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000001 /* MobBehavior.swift */; };
+		DD0000000000000000000005 /* WESpriteScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000004 /* WESpriteScene.swift */; };
+		DD0000000000000000000007 /* SceneAudioController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000006 /* SceneAudioController.swift */; };
+		DD0000000000000000000009 /* MotionItemBehavior.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000008 /* MotionItemBehavior.swift */; };
+		DE0000000000000000000002 /* SceneHierarchyResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE0000000000000000000001 /* SceneHierarchyResolver.swift */; };
+		DF0000000000000000000002 /* ScriptedOriginMotionBehavior.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF0000000000000000000001 /* ScriptedOriginMotionBehavior.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -133,6 +139,12 @@
 		CC0000000000000000000008 /* WorkshopAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkshopAPIService.swift; sourceTree = "<group>"; };
 		CC000000000000000000000A /* WorkshopViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkshopViewModel.swift; sourceTree = "<group>"; };
 		CC000000000000000000000C /* WorkshopView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkshopView.swift; sourceTree = "<group>"; };
+		DD0000000000000000000001 /* MobBehavior.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobBehavior.swift; sourceTree = "<group>"; };
+		DD0000000000000000000004 /* WESpriteScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WESpriteScene.swift; sourceTree = "<group>"; };
+		DD0000000000000000000006 /* SceneAudioController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneAudioController.swift; sourceTree = "<group>"; };
+		DD0000000000000000000008 /* MotionItemBehavior.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionItemBehavior.swift; sourceTree = "<group>"; };
+		DE0000000000000000000001 /* SceneHierarchyResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneHierarchyResolver.swift; sourceTree = "<group>"; };
+		DF0000000000000000000001 /* ScriptedOriginMotionBehavior.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScriptedOriginMotionBehavior.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -209,6 +221,7 @@
 			isa = PBXGroup;
 			children = (
 				AA1B2C3D4E5F600300ABCD01 /* SceneParsers */,
+				DD0000000000000000000003 /* SceneRuntime */,
 				5E7665252A2DC30D00E0E4B4 /* WEProject.swift */,
 				5EF28EBE2A8986AC0013ABBE /* WallpaperViewModel.swift */,
 				5EF28EC02A8990D90013ABBE /* VideoWallpaperViewModel.swift */,
@@ -234,6 +247,19 @@
 				AA1B2C3D4E5F600100ABCD03 /* SceneModels.swift */,
 			);
 			path = SceneParsers;
+			sourceTree = "<group>";
+		};
+		DD0000000000000000000003 /* SceneRuntime */ = {
+			isa = PBXGroup;
+			children = (
+				DD0000000000000000000001 /* MobBehavior.swift */,
+				DD0000000000000000000008 /* MotionItemBehavior.swift */,
+				DF0000000000000000000001 /* ScriptedOriginMotionBehavior.swift */,
+				DE0000000000000000000001 /* SceneHierarchyResolver.swift */,
+				DD0000000000000000000004 /* WESpriteScene.swift */,
+				DD0000000000000000000006 /* SceneAudioController.swift */,
+			);
+			path = SceneRuntime;
 			sourceTree = "<group>";
 		};
 		5E98F6CA2A826E8B00C12E34 /* SettingsView */ = {
@@ -472,6 +498,12 @@
 				CC0000000000000000000007 /* WorkshopAPIService.swift in Sources */,
 				CC0000000000000000000009 /* WorkshopViewModel.swift in Sources */,
 				CC000000000000000000000B /* WorkshopView.swift in Sources */,
+				DD0000000000000000000002 /* MobBehavior.swift in Sources */,
+				DD0000000000000000000005 /* WESpriteScene.swift in Sources */,
+				DD0000000000000000000007 /* SceneAudioController.swift in Sources */,
+				DD0000000000000000000009 /* MotionItemBehavior.swift in Sources */,
+				DF0000000000000000000002 /* ScriptedOriginMotionBehavior.swift in Sources */,
+				DE0000000000000000000002 /* SceneHierarchyResolver.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
