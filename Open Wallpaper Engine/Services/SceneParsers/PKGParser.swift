@@ -95,7 +95,10 @@ class PKGParser {
         let start = dataBaseOffset + Int(entry.offset)
         let end = start + Int(entry.length)
         guard end <= data.count else { return nil }
-        return data[start..<end]
+        // Materialize a zero-based Data value. Returning a slice preserves the
+        // package's original indices, which makes binary parsers that start at
+        // index zero trap when reading an extracted entry.
+        return Data(data[start..<end])
     }
 
     func extractJSON<T: Decodable>(named name: String, as type: T.Type) throws -> T? {
