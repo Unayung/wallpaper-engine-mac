@@ -2,212 +2,498 @@
 //  TEXParser.swift
 //  Open Wallpaper Engine
 //
-//  Parse Wallpaper Engine TEXV texture container files.
-//  Structure: TEXV0005 > TEXI (metadata) > TEXB (image data).
-//  Currently supports JPEG (format 0) extraction only.
+//  Parses Wallpaper Engine TEXV0005 texture containers, including LZ4-backed
+//  RGBA atlases and TEXS sprite animation metadata.
 //
 
 import Cocoa
+import Compression
 import Foundation
+import AVFoundation
 
-struct TEXMetadata {
+struct TEXMetadata: Equatable {
     let format: UInt32
+    let flags: UInt32
     let width: UInt32
     let height: UInt32
-    let textureWidth: UInt32  // power-of-2 padded
+    let textureWidth: UInt32
     let textureHeight: UInt32
+
+    var normalizedContentRect: CGRect {
+        // Static Wallpaper Engine TEX files can use their logical dimensions
+        // as the rendered object size while the complete storage atlas still
+        // contains authored scene pixels. Cropping to width/height removes
+        // real map content and breaks alignment with separately placed nodes.
+        CGRect(x: 0, y: 0, width: 1, height: 1)
+    }
 }
 
-class TEXParser {
+struct WETextureFrame: Equatable {
+    let imageIndex: UInt32
+    let duration: Double
+    let x: Double
+    let y: Double
+    let width: Double
+    let height: Double
+
+    func normalizedRect(textureWidth: Double, textureHeight: Double) -> CGRect {
+        guard textureWidth > 0, textureHeight > 0 else { return .zero }
+        return CGRect(
+            x: x / textureWidth,
+            y: 1 - ((y + height) / textureHeight),
+            width: width / textureWidth,
+            height: height / textureHeight
+        )
+    }
+}
+
+struct WEDecodedTexture {
+    let metadata: TEXMetadata
+    let image: NSImage
+    let rgbaData: Data?
+    let frames: [WETextureFrame]
+    /// Non-nil when the texture is an MP4 video texture (flags & 0x20).
+    /// These carry no alpha channel, so callers must not alpha-blend them.
+    var videoData: Data? = nil
+}
+
+enum TEXError: Error, LocalizedError, Equatable {
+    case unsupportedVideoTexture
+    case unexpectedEndOfFile
+    case invalidMagic(expected: String, actual: String)
+    case unsupportedContainer(String)
+    case unsupportedFormat(UInt32)
+    case invalidDimensions(width: UInt32, height: UInt32)
+    case invalidPayload
+    case decompressionFailed
+    case imageCreationFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .unsupportedVideoTexture:
+            return "TEX holds an MP4 video texture, which is not rendered yet"
+        case .unexpectedEndOfFile:
+            return "Unexpected end of TEX file"
+        case .invalidMagic(let expected, let actual):
+            return "Invalid TEX magic: expected \(expected), got \(actual)"
+        case .unsupportedContainer(let container):
+            return "Unsupported TEX container \(container)"
+        case .unsupportedFormat(let format):
+            return "Unsupported TEX pixel format \(format)"
+        case .invalidDimensions(let width, let height):
+            return "Invalid TEX dimensions \(width)x\(height)"
+        case .invalidPayload:
+            return "Invalid TEX image payload"
+        case .decompressionFailed:
+            return "Could not decompress TEX LZ4 payload"
+        case .imageCreationFailed:
+            return "Could not create an image from TEX pixels"
+        }
+    }
+}
+
+final class TEXParser {
+    private static let animatedFlag: UInt32 = 4
+    private static let videoFlag: UInt32 = 32
+    private static let rawRGBAFormat: UInt32 = 0
+    private static let unknownFreeImageFormat = UInt32.max
+
     private let data: Data
 
     init(data: Data) {
         self.data = data
     }
 
-    /// Extract the image from this TEX container.
-    /// Returns nil if the format is unsupported (e.g. DXT).
+    func decodeTexture() throws -> WEDecodedTexture {
+        var reader = TEXBinaryReader(data: data)
+
+        try reader.requireMagic("TEXV0005")
+        try reader.requireMagic("TEXI0001")
+
+        let format = try reader.readUInt32()
+        let flags = try reader.readUInt32()
+        let textureWidth = try reader.readUInt32()
+        let textureHeight = try reader.readUInt32()
+        let width = try reader.readUInt32()
+        let height = try reader.readUInt32()
+        _ = try reader.readUInt32()
+
+        guard textureWidth > 0, textureHeight > 0 else {
+            throw TEXError.invalidDimensions(width: textureWidth, height: textureHeight)
+        }
+
+        let metadata = TEXMetadata(
+            format: format,
+            flags: flags,
+            width: width,
+            height: height,
+            textureWidth: textureWidth,
+            textureHeight: textureHeight
+        )
+
+        let container = try reader.readMagic()
+        let containerVersion: Int
+        let imageCount: UInt32
+        let freeImageFormat: UInt32
+        var hasMP4Payload = false
+
+        switch container {
+        case "TEXB0001":
+            containerVersion = 1
+            imageCount = try reader.readUInt32()
+            freeImageFormat = Self.unknownFreeImageFormat
+        case "TEXB0002":
+            containerVersion = 2
+            imageCount = try reader.readUInt32()
+            freeImageFormat = Self.unknownFreeImageFormat
+        case "TEXB0003":
+            containerVersion = 3
+            imageCount = try reader.readUInt32()
+            freeImageFormat = try reader.readUInt32()
+        case "TEXB0004":
+            containerVersion = 4
+            imageCount = try reader.readUInt32()
+            freeImageFormat = try reader.readUInt32()
+            hasMP4Payload = try reader.readUInt32() != 0
+        default:
+            throw TEXError.unsupportedContainer(container)
+        }
+
+        guard imageCount > 0, imageCount < 10_000 else {
+            throw TEXError.invalidPayload
+        }
+
+        var primaryMipmap: TEXMipmap?
+
+        for imageIndex in 0..<imageCount {
+            let mipmapCount = try reader.readUInt32()
+            guard mipmapCount > 0, mipmapCount < 64 else {
+                throw TEXError.invalidPayload
+            }
+
+            for mipmapIndex in 0..<mipmapCount {
+                if containerVersion == 4, hasMP4Payload {
+                    _ = try reader.readUInt32()
+                    _ = try reader.readUInt32()
+                    _ = try reader.readNullTerminatedString()
+                    _ = try reader.readUInt32()
+                }
+
+                let mipWidth = try reader.readUInt32()
+                let mipHeight = try reader.readUInt32()
+                let compression: UInt32
+                let uncompressedSize: Int
+
+                if containerVersion >= 2 {
+                    compression = try reader.readUInt32()
+                    uncompressedSize = Int(try reader.readInt32())
+                } else {
+                    compression = 0
+                    uncompressedSize = 0
+                }
+
+                let compressedSize = Int(try reader.readInt32())
+                guard compressedSize >= 0, uncompressedSize >= 0 else {
+                    throw TEXError.invalidPayload
+                }
+                let payload = try reader.readData(count: compressedSize)
+
+                if imageIndex == 0, mipmapIndex == 0 {
+                    primaryMipmap = TEXMipmap(
+                        width: mipWidth,
+                        height: mipHeight,
+                        compression: compression,
+                        uncompressedSize: compression == 0 ? compressedSize : uncompressedSize,
+                        payload: payload
+                    )
+                }
+            }
+        }
+
+        guard let primaryMipmap else {
+            throw TEXError.invalidPayload
+        }
+
+        let decodedPayload = try decode(primaryMipmap)
+        let frames = try decodeFramesIfPresent(flags: flags, reader: &reader)
+
+        let image: NSImage
+        let rgbaData: Data?
+
+        if flags & Self.videoFlag != 0 {
+            // MP4 video texture: the payload is a self-contained .mp4, not pixels.
+            // Without this the H.264 bytes fall through to the raw-RGBA path below and
+            // get drawn as noise whenever they happen to be >= width*height*4.
+            //
+            // Skipped rather than decoded to a poster frame: these layers declare
+            // "translucent" blending but the video carries no alpha channel, so drawing
+            // a frame paints an opaque rectangle over the scene. Skipping leaves them
+            // absent, exactly as before, minus the noise.
+            let poster = try Self.videoPosterFrame(decodedPayload)
+            return WEDecodedTexture(metadata: metadata, image: poster, rgbaData: nil,
+                                    frames: frames, videoData: decodedPayload)
+        }
+
+        if freeImageFormat != Self.unknownFreeImageFormat {
+            guard let encodedImage = NSImage(data: decodedPayload) else {
+                throw TEXError.imageCreationFailed
+            }
+            image = encodedImage
+            rgbaData = nil
+        } else {
+            guard format == Self.rawRGBAFormat else {
+                throw TEXError.unsupportedFormat(format)
+            }
+            image = try makeRGBAImage(
+                pixels: decodedPayload,
+                width: primaryMipmap.width,
+                height: primaryMipmap.height
+            )
+            rgbaData = decodedPayload
+        }
+
+        return WEDecodedTexture(
+            metadata: metadata,
+            image: image,
+            rgbaData: rgbaData,
+            frames: frames
+        )
+    }
+
+    private static func videoPosterFrame(_ mp4: Data) throws -> NSImage {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString).appendingPathExtension("mp4")
+        do { try mp4.write(to: tmp) } catch { throw TEXError.imageCreationFailed }
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: tmp))
+        generator.appliesPreferredTrackTransform = true
+        guard let cg = try? generator.copyCGImage(at: .zero, actualTime: nil) else {
+            throw TEXError.imageCreationFailed
+        }
+        return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+    }
+
     func extractImage() -> NSImage? {
-        // Check TEXI format — format 4+ is DXT compressed (4=DXT1, 8=DXT5)
-        let texiMeta = readTEXIMetadata()
-        if let meta = texiMeta, meta.format >= 4 {
-            NSLog("[TEXParser] TEXI format %d (DXT %dx%d), skipping image scan (%d bytes)", meta.format, meta.width, meta.height, data.count)
+        do {
+            return try decodeTexture().image
+        } catch {
+            NSLog("[TEXParser] %@", String(describing: error))
             return nil
         }
-
-        // Check TEXB format — format 2+ is DXT compressed, no extractable image
-        let texbFmt = readTEXBFormat()
-        if texbFmt >= 2 {
-            NSLog("[TEXParser] TEXB format %d (DXT), skipping image scan (%d bytes)", texbFmt, data.count)
-            return nil
-        }
-
-        // Find TEXB section which contains the actual image data
-        guard let texbRange = findSection("TEXB") else {
-            NSLog("[TEXParser] TEXB section not found in %d bytes", data.count)
-            return nil
-        }
-
-        let texbData = data[texbRange]
-        NSLog("[TEXParser] TEXB found: range=%d..%d (%d bytes) fmt=%d", texbRange.lowerBound, texbRange.upperBound, texbData.count, texbFmt)
-
-        // Look for JPEG magic bytes (FFD8) within TEXB
-        if let jpegOffset = findJPEGMagic(in: texbData) {
-            // Try to find the JPEG end marker (FFD9) to avoid trailing garbage
-            let jpegData: Data
-            if let endOffset = findJPEGEnd(in: texbData, from: jpegOffset) {
-                jpegData = Data(texbData[jpegOffset...endOffset])
-            } else {
-                jpegData = Data(texbData[jpegOffset...])
-            }
-            NSLog("[TEXParser] JPEG found at offset %d, size=%d", jpegOffset - texbData.startIndex, jpegData.count)
-            if let image = NSImage(data: jpegData) { return image }
-            // If trimmed JPEG failed, try with all remaining data
-            if let image = NSImage(data: Data(texbData[jpegOffset...])) { return image }
-        }
-
-        // Look for PNG magic bytes (89504E47) within TEXB
-        if let pngOffset = findPNGMagic(in: texbData) {
-            let pngData = Data(texbData[pngOffset...])
-            if let image = NSImage(data: pngData) { return image }
-        }
-
-        // Fallback: scan entire data for JPEG/PNG (some TEX files have non-standard layout)
-        if let jpegOffset = findJPEGMagic(in: data) {
-            let jpegData: Data
-            if let endOffset = findJPEGEnd(in: data, from: jpegOffset) {
-                jpegData = Data(data[jpegOffset...endOffset])
-            } else {
-                jpegData = Data(data[jpegOffset...])
-            }
-            if let image = NSImage(data: jpegData) { return image }
-        }
-
-        NSLog("[TEXParser] No supported image format found in TEXB (%d bytes, may be DXT)", texbData.count)
-        return nil
     }
 
-    /// Extract raw JPEG/PNG data without creating NSImage
     func extractImageData() -> Data? {
-        guard let texbRange = findSection("TEXB") else { return nil }
-        let texbData = data[texbRange]
-
-        if let jpegOffset = findJPEGMagic(in: texbData) {
-            return Data(texbData[jpegOffset...])
-        }
-        if let pngOffset = findPNGMagic(in: texbData) {
-            return Data(texbData[pngOffset...])
-        }
-        return nil
+        try? decodeTexture().rgbaData
     }
 
-    // MARK: - Private
+    private func decode(_ mipmap: TEXMipmap) throws -> Data {
+        switch mipmap.compression {
+        case 0:
+            return mipmap.payload
+        case 1:
+            guard mipmap.uncompressedSize > 0 else {
+                throw TEXError.invalidPayload
+            }
 
-    /// Read TEXI metadata section: format, flags, width, height, textureWidth, textureHeight
-    private func readTEXIMetadata() -> TEXMetadata? {
-        guard let texiMagic = "TEXI".data(using: .ascii) else { return nil }
-        var i = data.startIndex
-        while i + 4 <= data.endIndex {
-            if data[i..<i+4] == texiMagic {
-                // Skip past "TEXIxxxx\0" (null-terminated name with version)
-                var j = i + 4
-                while j < data.endIndex && data[j] != 0 { j += 1 }
-                j += 1 // skip null byte
-                guard j + 24 <= data.endIndex else { return nil }
-                func u32(_ off: Int) -> UInt32 {
-                    UInt32(data[j+off]) | (UInt32(data[j+off+1]) << 8)
-                    | (UInt32(data[j+off+2]) << 16) | (UInt32(data[j+off+3]) << 24)
+            var output = [UInt8](repeating: 0, count: mipmap.uncompressedSize)
+            let decodedSize = mipmap.payload.withUnsafeBytes { source in
+                output.withUnsafeMutableBytes { destination in
+                    guard
+                        let sourceAddress = source.bindMemory(to: UInt8.self).baseAddress,
+                        let destinationAddress = destination.bindMemory(to: UInt8.self).baseAddress
+                    else {
+                        return 0
+                    }
+                    return compression_decode_buffer(
+                        destinationAddress,
+                        destination.count,
+                        sourceAddress,
+                        source.count,
+                        nil,
+                        COMPRESSION_LZ4_RAW
+                    )
                 }
-                return TEXMetadata(format: u32(0), width: u32(8), height: u32(12),
-                                   textureWidth: u32(16), textureHeight: u32(20))
             }
-            i += 1
+
+            guard decodedSize == mipmap.uncompressedSize else {
+                throw TEXError.decompressionFailed
+            }
+            return Data(output)
+        default:
+            throw TEXError.invalidPayload
         }
-        return nil
     }
 
-    /// Read the TEXB format field (first uint32 after the null-terminated section name).
-    /// Format 1 = image-extractable, Format 2 = DXT5, etc.
-    private func readTEXBFormat() -> Int {
-        guard let texbMagic = "TEXB".data(using: .ascii) else { return -1 }
-        var i = data.startIndex
-        while i + 4 <= data.endIndex {
-            if data[i..<i+4] == texbMagic {
-                // Skip past "TEXBxxxx\0" (null-terminated name with version)
-                var j = i + 4
-                while j < data.endIndex && data[j] != 0 { j += 1 }
-                j += 1 // skip null byte
-                guard j + 4 <= data.endIndex else { return -1 }
-                return Int(UInt32(data[j])
-                    | (UInt32(data[j+1]) << 8)
-                    | (UInt32(data[j+2]) << 16)
-                    | (UInt32(data[j+3]) << 24))
-            }
-            i += 1
+    private func decodeFramesIfPresent(
+        flags: UInt32,
+        reader: inout TEXBinaryReader
+    ) throws -> [WETextureFrame] {
+        guard flags & Self.animatedFlag != 0 else { return [] }
+
+        let animationVersion = try reader.readMagic()
+        guard ["TEXS0001", "TEXS0002", "TEXS0003"].contains(animationVersion) else {
+            throw TEXError.unsupportedContainer(animationVersion)
         }
-        return -1
+
+        let frameCount = try reader.readUInt32()
+        guard frameCount > 0, frameCount < 100_000 else {
+            throw TEXError.invalidPayload
+        }
+
+        if animationVersion == "TEXS0003" {
+            _ = try reader.readUInt32() // logical frame width
+            _ = try reader.readUInt32() // logical frame height
+        }
+
+        var frames: [WETextureFrame] = []
+        frames.reserveCapacity(Int(frameCount))
+
+        for _ in 0..<frameCount {
+            let imageIndex = try reader.readUInt32()
+            let duration = Double(try reader.readFloat())
+
+            if animationVersion == "TEXS0001" {
+                let x = Double(try reader.readUInt32())
+                let y = Double(try reader.readUInt32())
+                let width = Double(try reader.readUInt32())
+                _ = try reader.readUInt32()
+                _ = try reader.readUInt32()
+                let height = Double(try reader.readUInt32())
+                frames.append(
+                    WETextureFrame(
+                        imageIndex: imageIndex,
+                        duration: duration,
+                        x: x,
+                        y: y,
+                        width: width,
+                        height: height
+                    )
+                )
+            } else {
+                let x = Double(try reader.readFloat())
+                let y = Double(try reader.readFloat())
+                let width = Double(try reader.readFloat())
+                _ = try reader.readFloat()
+                _ = try reader.readFloat()
+                let height = Double(try reader.readFloat())
+                frames.append(
+                    WETextureFrame(
+                        imageIndex: imageIndex,
+                        duration: duration,
+                        x: x,
+                        y: y,
+                        width: width,
+                        height: height
+                    )
+                )
+            }
+        }
+
+        return frames
     }
 
-    /// Find a named section (e.g. "TEXI", "TEXB") in the TEX data
-    private func findSection(_ name: String) -> Range<Data.Index>? {
-        guard let nameData = name.data(using: .ascii) else { return nil }
-        let nameLen = nameData.count
-
-        var i = data.startIndex
-        while i + nameLen + 4 <= data.endIndex {
-            if data[i..<i+nameLen] == nameData {
-                // Section found — next 4 bytes after name are section length
-                let lenStart = i + nameLen
-                guard lenStart + 4 <= data.endIndex else { return nil }
-                let sectionLen = UInt32(data[lenStart])
-                    | (UInt32(data[lenStart+1]) << 8)
-                    | (UInt32(data[lenStart+2]) << 16)
-                    | (UInt32(data[lenStart+3]) << 24)
-                let contentStart = lenStart + 4
-                let contentEnd = contentStart + Int(sectionLen)
-                guard contentEnd <= data.endIndex else {
-                    return contentStart..<data.endIndex
-                }
-                return contentStart..<contentEnd
-            }
-            i += 1
+    private func makeRGBAImage(pixels: Data, width: UInt32, height: UInt32) throws -> NSImage {
+        guard width > 0, height > 0 else {
+            throw TEXError.invalidDimensions(width: width, height: height)
         }
-        return nil
+
+        let expectedBytes = Int(width) * Int(height) * 4
+        guard pixels.count >= expectedBytes else {
+            throw TEXError.invalidPayload
+        }
+
+        guard
+            let provider = CGDataProvider(data: pixels.prefix(expectedBytes) as CFData),
+            let cgImage = CGImage(
+                width: Int(width),
+                height: Int(height),
+                bitsPerComponent: 8,
+                bitsPerPixel: 32,
+                bytesPerRow: Int(width) * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue),
+                provider: provider,
+                decode: nil,
+                shouldInterpolate: false,
+                intent: .defaultIntent
+            )
+        else {
+            throw TEXError.imageCreationFailed
+        }
+
+        return NSImage(
+            cgImage: cgImage,
+            size: NSSize(width: Int(width), height: Int(height))
+        )
+    }
+}
+
+private struct TEXMipmap {
+    let width: UInt32
+    let height: UInt32
+    let compression: UInt32
+    let uncompressedSize: Int
+    let payload: Data
+}
+
+private struct TEXBinaryReader {
+    private let data: Data
+    private(set) var offset = 0
+
+    init(data: Data) {
+        self.data = data
     }
 
-    /// Find JPEG end marker (FFD9) scanning from a given start position
-    private func findJPEGEnd(in slice: Data, from start: Data.Index) -> Data.Index? {
-        var i = start
-        while i + 1 < slice.endIndex {
-            if slice[i] == 0xFF && slice[i+1] == 0xD9 {
-                return i + 1  // Include the D9 byte
-            }
-            i += 1
+    mutating func requireMagic(_ expected: String) throws {
+        let actual = try readMagic()
+        guard actual == expected else {
+            throw TEXError.invalidMagic(expected: expected, actual: actual)
         }
-        return nil
     }
 
-    private func findJPEGMagic(in slice: Data) -> Data.Index? {
-        var i = slice.startIndex
-        while i + 1 < slice.endIndex {
-            if slice[i] == 0xFF && slice[i+1] == 0xD8 {
-                return i
-            }
-            i += 1
-        }
-        return nil
+    mutating func readMagic() throws -> String {
+        let bytes = try readData(count: 9)
+        return String(decoding: bytes.prefix { $0 != 0 }, as: UTF8.self)
     }
 
-    private func findPNGMagic(in slice: Data) -> Data.Index? {
-        let pngMagic: [UInt8] = [0x89, 0x50, 0x4E, 0x47]
-        var i = slice.startIndex
-        while i + 3 < slice.endIndex {
-            if slice[i] == pngMagic[0] && slice[i+1] == pngMagic[1]
-                && slice[i+2] == pngMagic[2] && slice[i+3] == pngMagic[3] {
-                return i
-            }
-            i += 1
+    mutating func readUInt32() throws -> UInt32 {
+        guard offset + 4 <= data.count else {
+            throw TEXError.unexpectedEndOfFile
         }
-        return nil
+        let value = UInt32(data[offset])
+            | (UInt32(data[offset + 1]) << 8)
+            | (UInt32(data[offset + 2]) << 16)
+            | (UInt32(data[offset + 3]) << 24)
+        offset += 4
+        return value
+    }
+
+    mutating func readInt32() throws -> Int32 {
+        Int32(bitPattern: try readUInt32())
+    }
+
+    mutating func readFloat() throws -> Float {
+        Float(bitPattern: try readUInt32())
+    }
+
+    mutating func readData(count: Int) throws -> Data {
+        guard count >= 0, offset + count <= data.count else {
+            throw TEXError.unexpectedEndOfFile
+        }
+        defer { offset += count }
+        return Data(data[offset..<(offset + count)])
+    }
+
+    mutating func readNullTerminatedString() throws -> String {
+        let start = offset
+        while offset < data.count, data[offset] != 0 {
+            offset += 1
+        }
+        guard offset < data.count else {
+            throw TEXError.unexpectedEndOfFile
+        }
+        let value = String(decoding: data[start..<offset], as: UTF8.self)
+        offset += 1
+        return value
     }
 }
