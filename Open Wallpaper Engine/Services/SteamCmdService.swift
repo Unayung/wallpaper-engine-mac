@@ -24,6 +24,11 @@ class SteamCmdService: ObservableObject {
 
     /// Run a steamcmd process with proper pipe handling to avoid deadlocks.
     /// Reads stdout/stderr concurrently with process execution and applies a timeout.
+    /// How long steamcmd may produce no output at all before a download is abandoned.
+    private static let downloadIdleTimeout: TimeInterval = 180
+    /// How often the idle check runs while waiting for steamcmd to exit.
+    private static let downloadPollInterval: TimeInterval = 5
+
     private func runSteamCmd(arguments: [String], timeout: TimeInterval = 30) -> (output: String, exitCode: Int32) {
         guard let cmdPath = steamCmdPath else { return ("", -1) }
 
@@ -246,11 +251,19 @@ class SteamCmdService: ObservableObject {
 
             // Read output in real-time for progress updates
             var fullOutput = ""
+            // Guarded by outputLock: written from the readability handler's queue
+            // and read from this queue while waiting for exit.
+            let outputLock = NSLock()
+            var lastOutputAt = Date()
+            var terminatedOnSuccess = false
             let handle = outputPipe.fileHandleForReading
             handle.readabilityHandler = { [weak self] fileHandle in
                 let data = fileHandle.availableData
                 guard !data.isEmpty, let line = String(data: data, encoding: .utf8) else { return }
                 fullOutput += line
+                outputLock.lock()
+                lastOutputAt = Date()
+                outputLock.unlock()
 
                 let status = self?.parseProgress(line) ?? nil
                 if let status = status {
@@ -263,7 +276,8 @@ class SteamCmdService: ObservableObject {
                 // exiting on +quit (thread-race during Steam API teardown). The files are already
                 // on disk once the success line prints, so terminate it ourselves — otherwise
                 // waitUntilExit() below blocks forever and the UI stays on "Requesting download...".
-                if line.contains("Downloaded item") {
+                if line.contains("Downloaded item"), !terminatedOnSuccess {
+                    terminatedOnSuccess = true
                     process.terminate()
                 }
             }
@@ -278,20 +292,29 @@ class SteamCmdService: ObservableObject {
                 return
             }
 
-            // Bound the wait: the success-line handler above terminates steamcmd once the item
-            // is downloaded, but this timeout is the last-resort backstop for a process that
-            // stalls before ever printing success (e.g. a network hang), so it can never block
-            // the download indefinitely.
-            let deadline = DispatchTime.now() + 600
+            // Bound the wait: the success-line handler above terminates steamcmd once the
+            // item is downloaded, and this is the backstop for a process that stalls before
+            // ever printing success (e.g. a network hang).
+            //
+            // This is an *idle* timeout, not a ceiling on total download time. steamcmd
+            // reports progress continuously, so a large wallpaper on a slow connection stays
+            // alive as long as it keeps talking; only genuine silence ends it.
             let exitGroup = DispatchGroup()
             exitGroup.enter()
             DispatchQueue.global().async {
                 process.waitUntilExit()
                 exitGroup.leave()
             }
-            if exitGroup.wait(timeout: deadline) == .timedOut {
-                process.terminate()
-                _ = exitGroup.wait(timeout: .now() + 5)
+
+            while exitGroup.wait(timeout: .now() + Self.downloadPollInterval) == .timedOut {
+                outputLock.lock()
+                let idle = Date().timeIntervalSince(lastOutputAt)
+                outputLock.unlock()
+                guard idle < Self.downloadIdleTimeout else {
+                    process.terminate()
+                    _ = exitGroup.wait(timeout: .now() + 5)
+                    break
+                }
             }
 
             handle.readabilityHandler = nil
