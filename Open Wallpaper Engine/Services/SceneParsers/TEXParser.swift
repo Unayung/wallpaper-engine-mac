@@ -9,6 +9,7 @@
 import Cocoa
 import Compression
 import Foundation
+import AVFoundation
 
 struct TEXMetadata: Equatable {
     let format: UInt32
@@ -51,9 +52,13 @@ struct WEDecodedTexture {
     let image: NSImage
     let rgbaData: Data?
     let frames: [WETextureFrame]
+    /// Non-nil when the texture is an MP4 video texture (flags & 0x20).
+    /// These carry no alpha channel, so callers must not alpha-blend them.
+    var videoData: Data? = nil
 }
 
 enum TEXError: Error, LocalizedError, Equatable {
+    case unsupportedVideoTexture
     case unexpectedEndOfFile
     case invalidMagic(expected: String, actual: String)
     case unsupportedContainer(String)
@@ -65,6 +70,8 @@ enum TEXError: Error, LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
+        case .unsupportedVideoTexture:
+            return "TEX holds an MP4 video texture, which is not rendered yet"
         case .unexpectedEndOfFile:
             return "Unexpected end of TEX file"
         case .invalidMagic(let expected, let actual):
@@ -87,6 +94,7 @@ enum TEXError: Error, LocalizedError, Equatable {
 
 final class TEXParser {
     private static let animatedFlag: UInt32 = 4
+    private static let videoFlag: UInt32 = 32
     private static let rawRGBAFormat: UInt32 = 0
     private static let unknownFreeImageFormat = UInt32.max
 
@@ -127,6 +135,7 @@ final class TEXParser {
         let containerVersion: Int
         let imageCount: UInt32
         let freeImageFormat: UInt32
+        var hasMP4Payload = false
 
         switch container {
         case "TEXB0001":
@@ -145,7 +154,7 @@ final class TEXParser {
             containerVersion = 4
             imageCount = try reader.readUInt32()
             freeImageFormat = try reader.readUInt32()
-            _ = try reader.readUInt32() // MP4 marker
+            hasMP4Payload = try reader.readUInt32() != 0
         default:
             throw TEXError.unsupportedContainer(container)
         }
@@ -163,7 +172,7 @@ final class TEXParser {
             }
 
             for mipmapIndex in 0..<mipmapCount {
-                if containerVersion == 4 {
+                if containerVersion == 4, hasMP4Payload {
                     _ = try reader.readUInt32()
                     _ = try reader.readUInt32()
                     _ = try reader.readNullTerminatedString()
@@ -211,6 +220,20 @@ final class TEXParser {
         let image: NSImage
         let rgbaData: Data?
 
+        if flags & Self.videoFlag != 0 {
+            // MP4 video texture: the payload is a self-contained .mp4, not pixels.
+            // Without this the H.264 bytes fall through to the raw-RGBA path below and
+            // get drawn as noise whenever they happen to be >= width*height*4.
+            //
+            // Skipped rather than decoded to a poster frame: these layers declare
+            // "translucent" blending but the video carries no alpha channel, so drawing
+            // a frame paints an opaque rectangle over the scene. Skipping leaves them
+            // absent, exactly as before, minus the noise.
+            let poster = try Self.videoPosterFrame(decodedPayload)
+            return WEDecodedTexture(metadata: metadata, image: poster, rgbaData: nil,
+                                    frames: frames, videoData: decodedPayload)
+        }
+
         if freeImageFormat != Self.unknownFreeImageFormat {
             guard let encodedImage = NSImage(data: decodedPayload) else {
                 throw TEXError.imageCreationFailed
@@ -235,6 +258,19 @@ final class TEXParser {
             rgbaData: rgbaData,
             frames: frames
         )
+    }
+
+    private static func videoPosterFrame(_ mp4: Data) throws -> NSImage {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString).appendingPathExtension("mp4")
+        do { try mp4.write(to: tmp) } catch { throw TEXError.imageCreationFailed }
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: tmp))
+        generator.appliesPreferredTrackTransform = true
+        guard let cg = try? generator.copyCGImage(at: .zero, actualTime: nil) else {
+            throw TEXError.imageCreationFailed
+        }
+        return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
     }
 
     func extractImage() -> NSImage? {

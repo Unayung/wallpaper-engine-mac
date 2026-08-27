@@ -386,6 +386,13 @@ class SceneWallpaperViewModel: ObservableObject {
             }
         }
 
+        // Video textures are opaque H.264 with no alpha channel, so alpha blending
+        // would paint the frame's black background as a solid rectangle over the
+        // scene. These layers are authored to be composited additively.
+        if decoded.videoData != nil {
+            node.blendMode = .add
+        }
+
         return BuiltImageNode(
             node: node,
             frameTextures: frameTextures,
