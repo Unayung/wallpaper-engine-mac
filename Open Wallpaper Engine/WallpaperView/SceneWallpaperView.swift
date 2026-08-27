@@ -25,6 +25,10 @@ struct SceneWallpaperView: NSViewRepresentable {
         skView.ignoresSiblingOrder = true
         skView.allowsTransparency = false
         skView.preferredFramesPerSecond = Int(AppDelegate.shared.globalSettingsViewModel.settings.fps)
+        viewModel.updatePlayback(
+            playRate: wallpaperViewModel.playRate,
+            volume: wallpaperViewModel.playVolume
+        )
 
         if let scene = viewModel.skScene {
             skView.presentScene(scene)
@@ -53,5 +57,9 @@ struct SceneWallpaperView: NSViewRepresentable {
 
         // Pause/resume based on play rate
         skView.isPaused = wallpaperViewModel.playRate == 0
+        viewModel.updatePlayback(
+            playRate: wallpaperViewModel.playRate,
+            volume: wallpaperViewModel.playVolume
+        )
     }
 }

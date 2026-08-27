@@ -53,24 +53,61 @@ struct WEOrthogonalProjection: Codable {
 
 // MARK: - Scene Objects
 
-/// Many WE scene fields can be either a plain value or a {"script":"..","value":..} object.
-/// This wrapper decodes the plain value and silently ignores script objects.
-private func decodeFlexible<T: Decodable>(_ type: T.Type, container: KeyedDecodingContainer<WESceneObject.CodingKeys>, key: WESceneObject.CodingKeys) -> T? {
-    try? container.decodeIfPresent(T.self, forKey: key)
+/// Wallpaper Engine stores many scene values either directly or in a
+/// {"script":"...","value":...} wrapper. Preserve both forms without executing
+/// downloaded scripts.
+struct WEScriptedValue<Value: Codable>: Codable {
+    var value: Value?
+    var script: String?
+
+    init(value: Value?, script: String? = nil) {
+        self.value = value
+        self.script = script
+    }
+
+    init(from decoder: Decoder) throws {
+        if let single = try? decoder.singleValueContainer(),
+           let plainValue = try? single.decode(Value.self) {
+            value = plainValue
+            script = nil
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        value = try container.decodeIfPresent(Value.self, forKey: .value)
+        script = try container.decodeIfPresent(String.self, forKey: .script)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        if script == nil, let value {
+            var single = encoder.singleValueContainer()
+            try single.encode(value)
+            return
+        }
+
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(value, forKey: .value)
+        try container.encodeIfPresent(script, forKey: .script)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case value, script
+    }
 }
 
 struct WESceneObject: Codable {
     // Common
     var id: Int?
+    var parent: Int?
     var name: String?
-    var origin: String?
-    var scale: String?
+    private var originValue: WEScriptedValue<String>?
+    private var scaleValue: WEScriptedValue<String>?
     var angles: String?
-    var visible: Bool?
+    private var visibleValue: WEScriptedValue<Bool>?
 
     // Image objects
     var image: String?       // path to model JSON
-    var alpha: Double?
+    private var alphaValue: WEScriptedValue<Double>?
     var brightness: Double?
     var color: String?
     var colorBlendMode: Int?
@@ -85,28 +122,45 @@ struct WESceneObject: Codable {
     var particle: String?    // path to particle JSON
     var instanceoverride: WEInstanceOverride?
 
+    // Sound / effects
+    var sound: [String]?
+    var effects: [WEEffect]?
+
+    var origin: String? { originValue?.value }
+    var originScript: String? { originValue?.script }
+    var scale: String? { scaleValue?.value }
+    var scaleScript: String? { scaleValue?.script }
+    var visible: Bool? { visibleValue?.value }
+    var visibleScript: String? { visibleValue?.script }
+    var alpha: Double? { alphaValue?.value }
+    var alphaScript: String? { alphaValue?.script }
+
     enum CodingKeys: String, CodingKey {
-        case id, name, origin, scale, angles, visible
+        case id, parent, name, origin, scale, angles, visible
         case image, alpha, brightness, color, colorBlendMode, size, alignment
         case solid, copybackground, parallaxDepth, perspective
         case particle, instanceoverride
+        case sound, effects
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         // Fields that are always simple types
         id = try? c.decodeIfPresent(Int.self, forKey: .id)
+        parent = try? c.decodeIfPresent(Int.self, forKey: .parent)
         name = try? c.decodeIfPresent(String.self, forKey: .name)
         image = try? c.decodeIfPresent(String.self, forKey: .image)
         particle = try? c.decodeIfPresent(String.self, forKey: .particle)
         instanceoverride = try? c.decodeIfPresent(WEInstanceOverride.self, forKey: .instanceoverride)
+        sound = try? c.decodeIfPresent([String].self, forKey: .sound)
+        effects = try? c.decodeIfPresent([WEEffect].self, forKey: .effects)
 
         // Fields that may be simple values or {"script":..,"value":..} objects
-        origin = try? c.decodeIfPresent(String.self, forKey: .origin)
-        scale = try? c.decodeIfPresent(String.self, forKey: .scale)
+        originValue = try? c.decodeIfPresent(WEScriptedValue<String>.self, forKey: .origin)
+        scaleValue = try? c.decodeIfPresent(WEScriptedValue<String>.self, forKey: .scale)
         angles = try? c.decodeIfPresent(String.self, forKey: .angles)
-        visible = try? c.decodeIfPresent(Bool.self, forKey: .visible)
-        alpha = try? c.decodeIfPresent(Double.self, forKey: .alpha)
+        visibleValue = try? c.decodeIfPresent(WEScriptedValue<Bool>.self, forKey: .visible)
+        alphaValue = try? c.decodeIfPresent(WEScriptedValue<Double>.self, forKey: .alpha)
         brightness = try? c.decodeIfPresent(Double.self, forKey: .brightness)
         color = try? c.decodeIfPresent(String.self, forKey: .color)
         colorBlendMode = try? c.decodeIfPresent(Int.self, forKey: .colorBlendMode)
@@ -116,6 +170,91 @@ struct WESceneObject: Codable {
         copybackground = try? c.decodeIfPresent(Bool.self, forKey: .copybackground)
         parallaxDepth = try? c.decodeIfPresent(String.self, forKey: .parallaxDepth)
         perspective = try? c.decodeIfPresent(Bool.self, forKey: .perspective)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(id, forKey: .id)
+        try c.encodeIfPresent(parent, forKey: .parent)
+        try c.encodeIfPresent(name, forKey: .name)
+        try c.encodeIfPresent(originValue, forKey: .origin)
+        try c.encodeIfPresent(scaleValue, forKey: .scale)
+        try c.encodeIfPresent(angles, forKey: .angles)
+        try c.encodeIfPresent(visibleValue, forKey: .visible)
+        try c.encodeIfPresent(image, forKey: .image)
+        try c.encodeIfPresent(alphaValue, forKey: .alpha)
+        try c.encodeIfPresent(brightness, forKey: .brightness)
+        try c.encodeIfPresent(color, forKey: .color)
+        try c.encodeIfPresent(colorBlendMode, forKey: .colorBlendMode)
+        try c.encodeIfPresent(size, forKey: .size)
+        try c.encodeIfPresent(alignment, forKey: .alignment)
+        try c.encodeIfPresent(solid, forKey: .solid)
+        try c.encodeIfPresent(copybackground, forKey: .copybackground)
+        try c.encodeIfPresent(parallaxDepth, forKey: .parallaxDepth)
+        try c.encodeIfPresent(perspective, forKey: .perspective)
+        try c.encodeIfPresent(particle, forKey: .particle)
+        try c.encodeIfPresent(instanceoverride, forKey: .instanceoverride)
+        try c.encodeIfPresent(sound, forKey: .sound)
+        try c.encodeIfPresent(effects, forKey: .effects)
+    }
+}
+
+struct WEEffect: Codable {
+    var file: String?
+    var id: Int?
+    var name: String?
+    var passes: [WEEffectPass]?
+    private var visibleValue: WEScriptedValue<Bool>?
+
+    var visible: Bool? { visibleValue?.value }
+    var visibleScript: String? { visibleValue?.script }
+
+    private enum CodingKeys: String, CodingKey {
+        case file, id, name, passes, visible
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        file = try? c.decodeIfPresent(String.self, forKey: .file)
+        id = try? c.decodeIfPresent(Int.self, forKey: .id)
+        name = try? c.decodeIfPresent(String.self, forKey: .name)
+        passes = try? c.decodeIfPresent([WEEffectPass].self, forKey: .passes)
+        visibleValue = try? c.decodeIfPresent(WEScriptedValue<Bool>.self, forKey: .visible)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(file, forKey: .file)
+        try c.encodeIfPresent(id, forKey: .id)
+        try c.encodeIfPresent(name, forKey: .name)
+        try c.encodeIfPresent(passes, forKey: .passes)
+        try c.encodeIfPresent(visibleValue, forKey: .visible)
+    }
+}
+
+struct WEEffectPass: Codable {
+    var id: Int?
+    var constantShaderValues: WEEffectShaderValues?
+    var textures: [String?]?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case constantShaderValues = "constantshadervalues"
+        case textures
+    }
+}
+
+struct WEEffectShaderValues: Codable {
+    var repeatValue: String?
+    var speedX: Double?
+    var speedY: Double?
+    var alpha: Double?
+
+    private enum CodingKeys: String, CodingKey {
+        case repeatValue = "repeat"
+        case speedX = "speedx"
+        case speedY = "speedy"
+        case alpha
     }
 }
 
@@ -163,6 +302,7 @@ struct WEMaterialPass: Codable {
     var blending: String?    // "translucent", "additive"
     var shader: String?
     var textures: [String]?
+    var combos: [String: Int]?
     var cullmode: String?
     var depthtest: String?
     var depthwrite: String?
