@@ -14,7 +14,7 @@ They have admin access to the repo and provide support reviewing issues and pull
 
 Contributors  (sorted alphabetically)
 -------------------------------------
-[Full List of Contributors](https://github.com/Microsoft/Recommenders/graphs/contributors)
+[Full List of Contributors](https://github.com/Unayung/wallpaper-engine-mac/graphs/contributors)
 
 To contributors: please add your name to the list when you submit a patch to the project.
 
@@ -22,3 +22,8 @@ To contributors: please add your name to the list when you submit a patch to the
    * Help with Chinese i18n translation
 * **[Klaus Zhu](https://github.com/klauszhu1105)**
    * Designed the App's logo icons
+* **[mustpe](https://github.com/clspeter)**
+   * Fixed Workshop downloads hanging on macOS when steamcmd failed to exit
+* **[Woody](https://github.com/WoodyLinWei)**
+   * Native runtime for animated scene wallpapers: texture decoding, sprite
+     animation, layer hierarchy, scroll effects and scene audio
