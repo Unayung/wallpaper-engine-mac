@@ -89,9 +89,6 @@
         }
       }
     },
-    "!!! Notice that this may affects performance !!!" : {
-
-    },
     "@haren724" : {
       "localizations" : {
         "zh-Hans" : {
@@ -118,6 +115,146 @@
     },
     "%lld" : {
 
+    },
+    "Above 30 FPS, scene wallpapers use noticeably more energy and GPU time." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高于 30 FPS 时，场景壁纸会明显消耗更多电量和 GPU 时间。"
+          }
+        }
+      }
+    },
+    "Above 60 FPS, scene wallpapers use far more energy and GPU time, which can slow down other apps and drain the battery." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高于 60 FPS 时，场景壁纸会消耗多得多的电量和 GPU 时间，可能拖慢其他 App 并加快电池耗电。"
+          }
+        }
+      }
+    },
+    "Custom" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自定义"
+          }
+        }
+      }
+    },
+    "Library" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "资源库"
+          }
+        }
+      }
+    },
+    "macOS cannot find this copy of the app to launch at login. Moving it to the Applications folder usually fixes this." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 找不到此 App 副本，无法在登录时启动。将其移到“应用程序”文件夹通常可以解决此问题。"
+          }
+        }
+      }
+    },
+    "My Wallpapers" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我的壁纸"
+          }
+        }
+      }
+    },
+    "Open Login Items" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开登录项"
+          }
+        }
+      }
+    },
+    "Preset" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预设"
+          }
+        }
+      }
+    },
+    "Reset All Settings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重置所有设置"
+          }
+        }
+      }
+    },
+    "Reset all settings to their defaults?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要将所有设置恢复为默认值吗？"
+          }
+        }
+      }
+    },
+    "Show refresh button in library" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在资源库中显示刷新按钮"
+          }
+        }
+      }
+    },
+    "This resets the playback rules, quality, frame rate, appearance and menu bar settings. Your wallpapers, library and Start with macOS are not affected. This cannot be undone." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这将重置播放规则、画质、帧率、外观和菜单栏设置。你的壁纸、资源库和“随 macOS 启动”不受影响。此操作无法撤销。"
+          }
+        }
+      }
+    },
+    "Waiting for your approval in System Settings → Login Items." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在等待你在“系统设置”→“登录项”中批准。"
+          }
+        }
+      }
+    },
+    "Wallpaper Engine's reflection effect on scene layers. Requires Post-Processing." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "场景图层上的 Wallpaper Engine 反射效果。需要开启后期处理。"
+          }
+        }
+      }
     },
     "×8 MSAA is only recommended for powerful high-end desktop graphics cards." : {
       "localizations" : {
@@ -239,16 +376,6 @@
         }
       }
     },
-    "Advanced" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "高级"
-          }
-        }
-      }
-    },
     "Age Rating" : {
       "localizations" : {
         "zh-Hans" : {
@@ -269,45 +396,12 @@
         }
       }
     },
-    "Animates" : {
-
-    },
-    "Anti-aliasing" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "抗锯齿"
-          }
-        }
-      }
-    },
     "Appearance" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "外观"
-          }
-        }
-      }
-    },
-    "Apple AVKit" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : ""
-          }
-        }
-      }
-    },
-    "Application Rules" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "为每个应用设置规则"
           }
         }
       }
@@ -342,16 +436,6 @@
         }
       }
     },
-    "Audio Output" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "音频输出"
-          }
-        }
-      }
-    },
     "Auto" : {
       "localizations" : {
         "zh-Hans" : {
@@ -378,16 +462,6 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "自动启动"
-          }
-        }
-      }
-    },
-    "Basic Setup" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "基础设置"
           }
         }
       }
@@ -452,16 +526,6 @@
         }
       }
     },
-    "Chinese Simplified" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "简体中文"
-          }
-        }
-      }
-    },
     "Choose Display" : {
       "localizations" : {
         "zh-Hans" : {
@@ -481,9 +545,6 @@
           }
         }
       }
-    },
-    "Come out soon..." : {
-
     },
     "Comment" : {
       "localizations" : {
@@ -575,19 +636,6 @@
         }
       }
     },
-    "Description..." : {
-
-    },
-    "Developer" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "开发者"
-          }
-        }
-      }
-    },
     "Disabled" : {
       "localizations" : {
         "zh-Hans" : {
@@ -638,32 +686,12 @@
         }
       }
     },
-    "Dual Monitor" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "双显示器"
-          }
-        }
-      }
-    },
     "Edit" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "编辑"
-          }
-        }
-      }
-    },
-    "Edited" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "已编辑"
           }
         }
       }
@@ -678,32 +706,12 @@
         }
       }
     },
-    "English" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "英文"
-          }
-        }
-      }
-    },
     "Enter Full Screen" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "切换全屏"
-          }
-        }
-      }
-    },
-    "Errors Only" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "仅错误"
           }
         }
       }
@@ -746,16 +754,6 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "过滤结果"
-          }
-        }
-      }
-    },
-    "Follow System" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "跟随系统"
           }
         }
       }
@@ -852,26 +850,6 @@
         }
       }
     },
-    "High FPS may slow down your PC!" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "高 FPS 可能会降低电脑的运行速度！"
-          }
-        }
-      }
-    },
-    "High FPS may slow down your PC! We're serious, this is too much 🔥." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "高 FPS 可能会降低电脑的运行速度！这可不是开玩笑，您设置的 FPS 太高了🔥."
-          }
-        }
-      }
-    },
     "High Performance" : {
       "localizations" : {
         "zh-Hans" : {
@@ -931,9 +909,6 @@
           }
         }
       }
-    },
-    "Internal" : {
-
     },
     "Keep Running" : {
       "localizations" : {
@@ -1016,16 +991,6 @@
         }
       }
     },
-    "Log Level" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "日志记录等级"
-          }
-        }
-      }
-    },
     "Low" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1102,36 +1067,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移到废纸篓"
-          }
-        }
-      }
-    },
-    "MSAA x2" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MSAA x2"
-          }
-        }
-      }
-    },
-    "MSAA x4" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MSAA x4"
-          }
-        }
-      }
-    },
-    "MSAA x8" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MSAA x8"
           }
         }
       }
@@ -1358,16 +1293,6 @@
         }
       }
     },
-    "Pause when VRAM is exhausted" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "当显存耗尽时暂停"
-          }
-        }
-      }
-    },
     "Performance" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1439,33 +1364,12 @@
         }
       }
     },
-    "Plugins" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "插件"
-          }
-        }
-      }
-    },
     "Post-Processing" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "后处理"
-          }
-        }
-      }
-    },
-    "Potrait Monitor / Phone" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "纵向显示器/手机"
           }
         }
       }
@@ -1486,16 +1390,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "处理中"
-          }
-        }
-      }
-    },
-    "Process Piority" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "进程优先级"
           }
         }
       }
@@ -1602,16 +1496,6 @@
         }
       }
     },
-    "Reload when changing output device" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "更改音频输出设备时重新加载"
-          }
-        }
-      }
-    },
     "Remove Wallpaper" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1692,22 +1576,12 @@
         }
       }
     },
-    "Resolution" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "分辨率"
-          }
-        }
-      }
-    },
-    "Restart after crashing" : {
+    "Resume" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "崩溃后重启"
+            "value" : "继续"
           }
         }
       }
@@ -1957,15 +1831,6 @@
         }
       }
     },
-    "Third-party" : {
-
-    },
-    "This plugin enables animation of GIF thumbnail images in wallpaper explorer" : {
-
-    },
-    "Those all settings above don't have to be saved for taking effect." : {
-
-    },
     "Titles per page" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1982,16 +1847,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "开/yin can桌面壁纸窗口"
-          }
-        }
-      }
-    },
-    "Triple Monitor" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "三显示器"
           }
         }
       }
@@ -2022,16 +1877,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "超高模式可将 HDR 高光添加到支持的壁纸中，建议仅用于功能强大的高端台式机显卡。"
-          }
-        }
-      }
-    },
-    "Ultra Widescreen" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "带鱼屏"
           }
         }
       }
@@ -2086,16 +1931,6 @@
         }
       }
     },
-    "Verbose" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "详细日志"
-          }
-        }
-      }
-    },
     "version: %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2112,16 +1947,6 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "视频"
-          }
-        }
-      }
-    },
-    "Video Framework" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "needs_review",
-            "value" : "视频播放框架"
           }
         }
       }
@@ -2256,16 +2081,6 @@
         }
       }
     },
-    "Widescreen" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "宽屏幕"
-          }
-        }
-      }
-    },
     "Window" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2336,8 +2151,195 @@
         }
       }
     },
-    "􀄪 You can toggle this to have a preview" : {
-
+    "Animate GIF previews in library" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在资源库中播放 GIF 预览"
+          }
+        }
+      }
+    },
+    "Follows the system language. To use a different language for this app, add it under Applications in Language & Region." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随系统语言。如需为此应用使用其他语言，请在“语言与地区”的“应用程序”中添加。"
+          }
+        }
+      }
+    },
+    "Open Language & Region" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开“语言与地区”"
+          }
+        }
+      }
+    },
+    "Library folder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "资源库文件夹"
+          }
+        }
+      }
+    },
+    "The chosen folder %@ is not available, so the default folder is used until it is." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选文件夹 %@ 当前不可用，在其恢复可用之前将使用默认文件夹。"
+          }
+        }
+      }
+    },
+    "Changing the folder does not move or delete any files. A screen showing a wallpaper from the previous folder keeps it until you choose another, and new Workshop downloads go to the current folder." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改文件夹不会移动或删除任何文件。正在显示旧文件夹中壁纸的屏幕会继续显示它，直到你选择其他壁纸；新的创意工坊下载会存入当前文件夹。"
+          }
+        }
+      }
+    },
+    "Disable scene scripts" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停用场景脚本"
+          }
+        }
+      }
+    },
+    "The chosen folder %@ does not exist, so the default location is used." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选文件夹 %@ 不存在，因此使用默认位置。"
+          }
+        }
+      }
+    },
+    "Not found. Scene layers that use Wallpaper Engine's shared models, materials and particle presets will be missing. Install Wallpaper Engine with Steam, or choose its assets folder." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未找到。使用 Wallpaper Engine 共享模型、材质和粒子预设的场景图层将无法显示。请通过 Steam 安装 Wallpaper Engine，或选择其 assets 文件夹。"
+          }
+        }
+      }
+    },
+    "Wallpaper Engine assets" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wallpaper Engine 资源"
+          }
+        }
+      }
+    },
+    "Developer" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开发者"
+          }
+        }
+      }
+    },
+    "With scripts disabled, every clock, calendar and other scripted layer shows the value saved in the scene instead of running its script. Use it to tell a layer a script changes from one that is drawn wrong. Scene wallpapers reload when either setting changes." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停用脚本后，时钟、日历等由脚本驱动的图层将显示场景中保存的值，而不运行其脚本。可用于区分由脚本改变的图层和绘制错误的图层。更改任一设置时，场景壁纸会重新加载。"
+          }
+        }
+      }
+    },
+    "Choose the folder that holds your wallpapers." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择存放壁纸的文件夹。"
+          }
+        }
+      }
+    },
+    "Choose" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择"
+          }
+        }
+      }
+    },
+    "Choose Wallpaper Engine's assets folder (wallpaper_engine/assets)." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择 Wallpaper Engine 的 assets 文件夹（wallpaper_engine/assets）。"
+          }
+        }
+      }
+    },
+    "Default" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认"
+          }
+        }
+      }
+    },
+    "Show in Finder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在访达中显示"
+          }
+        }
+      }
+    },
+    "Choose…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择…"
+          }
+        }
+      }
+    },
+    "Reset to Default" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复默认"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

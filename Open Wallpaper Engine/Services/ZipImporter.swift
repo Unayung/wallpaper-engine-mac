@@ -1,16 +1,17 @@
 import Foundation
 
+/// Zip extraction and wallpaper-folder discovery. Installing what is found is
+/// `WallpaperImporter`'s job, so a zip, a dropped folder and a panel selection all land in
+/// the library by the same rules.
 enum ZipImporter {
-    /// Extracts a zip file and copies any wallpaper folders (containing project.json) to the wallpapers directory.
-    /// Returns the number of wallpapers successfully imported.
-    @discardableResult
-    static func importZip(at zipURL: URL) -> Int {
+    /// Extracts a zip into a fresh temporary directory and returns it, or nil when `ditto`
+    /// fails. The caller owns the directory and removes it.
+    static func extract(zipAt zipURL: URL) -> URL? {
         let fm = FileManager.default
         let tempDir = fm.temporaryDirectory.appending(path: UUID().uuidString)
 
-        defer { try? fm.removeItem(at: tempDir) }
-
-        // Extract zip using macOS built-in ditto
+        // Extract zip using macOS built-in ditto. Its output is not piped, so there is no
+        // pipe buffer to fill and waitUntilExit cannot deadlock.
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
         process.arguments = ["-xk", zipURL.path, tempDir.path]
@@ -19,35 +20,20 @@ enum ZipImporter {
             process.waitUntilExit()
         } catch {
             print("ZipImporter: ditto failed: \(error)")
-            return 0
+            try? fm.removeItem(at: tempDir)
+            return nil
         }
         guard process.terminationStatus == 0 else {
             print("ZipImporter: ditto exited with status \(process.terminationStatus)")
-            return 0
+            try? fm.removeItem(at: tempDir)
+            return nil
         }
-
-        // Find wallpaper folders inside extracted content
-        let wallpaperURLs = findWallpaperFolders(in: tempDir)
-        let dest = fm.wallpapersDirectory
-        var imported = 0
-
-        for url in wallpaperURLs {
-            let target = dest.appending(path: url.lastPathComponent)
-            if !fm.fileExists(atPath: target.path) {
-                do {
-                    try fm.copyItem(at: url, to: target)
-                    imported += 1
-                } catch {
-                    print("ZipImporter: copy failed for \(url.lastPathComponent): \(error)")
-                }
-            }
-        }
-
-        return imported
+        return tempDir
     }
 
-    /// Recursively searches for directories containing project.json, up to 3 levels deep.
-    private static func findWallpaperFolders(in directory: URL) -> [URL] {
+    /// Directories containing project.json: `directory` itself if it is one, otherwise its
+    /// children, otherwise its grandchildren (a zip or a download often has a wrapper folder).
+    static func findWallpaperFolders(in directory: URL) -> [URL] {
         let fm = FileManager.default
         var results: [URL] = []
 

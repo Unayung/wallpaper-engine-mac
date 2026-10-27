@@ -2,14 +2,26 @@ import SwiftUI
 
 struct WorkshopView: SubviewOfContentView {
     @ObservedObject var viewModel: ContentViewModel
+    /// Observed rather than read once, so saving a key on the login screen opens the browser.
+    @AppStorage("SteamWebAPIKey") private var apiKey = ""
+    @State private var showLogin = false
 
     init(contentViewModel viewModel: ContentViewModel) {
         self.viewModel = viewModel
     }
 
+    /// Browsing needs only the Web API key — QueryFiles never touches steamcmd — so the browser
+    /// opens as soon as there is one. Only downloading needs a steamcmd login, and the cards
+    /// already say "Login to download" without one. It used to be the other way round: no
+    /// browsing at all until steamcmd was installed and logged in.
     var body: some View {
         VStack(spacing: 0) {
-            if !viewModel.steamCmd.isInstalled {
+            if !apiKey.trimmingCharacters(in: .whitespaces).isEmpty {
+                if !viewModel.steamCmd.isLoggedIn {
+                    downloadsUnavailableBar
+                }
+                WorkshopBrowserView(viewModel: viewModel.workshopVM)
+            } else if !viewModel.steamCmd.isInstalled {
                 SteamCmdNotInstalledView(steamCmd: viewModel.steamCmd)
             } else if !viewModel.steamCmd.isLoggedIn {
                 SteamLoginView(steamCmd: viewModel.steamCmd)
@@ -18,6 +30,38 @@ struct WorkshopView: SubviewOfContentView {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .sheet(isPresented: $showLogin) {
+            VStack(spacing: 0) {
+                if viewModel.steamCmd.isInstalled {
+                    SteamLoginView(steamCmd: viewModel.steamCmd)
+                } else {
+                    SteamCmdNotInstalledView(steamCmd: viewModel.steamCmd)
+                }
+                Button("Close") { showLogin = false }
+                    .keyboardShortcut(.cancelAction)
+                    .padding(.bottom)
+            }
+            .onChange(of: viewModel.steamCmd.isLoggedIn) { loggedIn in
+                if loggedIn { showLogin = false }
+            }
+        }
+    }
+
+    private var downloadsUnavailableBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.down.circle")
+                .foregroundStyle(.secondary)
+            Text(viewModel.steamCmd.isInstalled
+                 ? "Log in to Steam to download wallpapers."
+                 : "Install steamcmd to download wallpapers.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button(viewModel.steamCmd.isInstalled ? "Log In..." : "Set Up...") { showLogin = true }
+                .controlSize(.small)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 6)
     }
 }
 
@@ -192,6 +236,7 @@ private struct SteamLoginView: View {
 
 private struct WorkshopBrowserView: View {
     @ObservedObject var viewModel: WorkshopViewModel
+    @State private var showGenres = false
 
     var body: some View {
         VStack(spacing: 8) {
@@ -233,17 +278,74 @@ private struct WorkshopBrowserView: View {
             .cornerRadius(8)
             .padding(.horizontal)
 
-            // Tag filters
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    tagGroup("Rating:", WorkshopViewModel.contentRatingTags)
-                    Divider().frame(height: 20)
-                    tagGroup("Type:", WorkshopViewModel.typeTags)
-                    Divider().frame(height: 20)
-                    tagGroup("", WorkshopViewModel.genreTags)
+            // Filters. Rating and Type are single-choice because Steam ANDs every tag it
+            // is given; genres are a collapsible grid so the bar stays one row tall.
+            VStack(spacing: 8) {
+                HStack(spacing: 10) {
+                    Picker("Rating", selection: ratingSelection) {
+                        Text("Any rating").tag(String?.none)
+                        ForEach(WorkshopViewModel.contentRatingTags, id: \.self) { tag in
+                            Text(tag).tag(String?.some(tag))
+                        }
+                    }
+                    .frame(width: 150)
+
+                    Picker("Type", selection: typeSelection) {
+                        Text("Any type").tag(String?.none)
+                        ForEach(WorkshopViewModel.typeTags, id: \.self) { tag in
+                            Text(tag).tag(String?.some(tag))
+                        }
+                    }
+                    .frame(width: 140)
+
+                    Spacer()
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { showGenres.toggle() }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: showGenres ? "chevron.down" : "chevron.right")
+                                .font(.caption2)
+                            Text(genreButtonLabel)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+
+                    if viewModel.activeGenreCount > 0 {
+                        Button("Clear") {
+                            viewModel.clearGenres()
+                            Task { await viewModel.search() }
+                        }
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
                 }
-                .padding(.horizontal)
+
+                if showGenres {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Click once to require a genre, twice to hide it everywhere.")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 6)], spacing: 6) {
+                            ForEach(WorkshopViewModel.genreTags, id: \.self) { tag in
+                                genreChip(tag)
+                            }
+                        }
+                    }
+                }
+
+                if viewModel.hiddenByExclusion > 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "eye.slash")
+                        Text("\(viewModel.hiddenByExclusion) hidden by your excluded genres")
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
+            .padding(.horizontal)
 
             // Results
             if viewModel.isLoading && viewModel.items.isEmpty {
@@ -299,7 +401,12 @@ private struct WorkshopBrowserView: View {
                     .padding()
 
                     if !viewModel.items.isEmpty {
-                        Button("Load More") {
+                        if let error = viewModel.loadMoreError {
+                            Label("Couldn't load more: \(error)", systemImage: "exclamationmark.triangle")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Button(viewModel.loadMoreError == nil ? "Load More" : "Try Again") {
                             Task { await viewModel.loadMore() }
                         }
                         .buttonStyle(.bordered)
@@ -316,29 +423,80 @@ private struct WorkshopBrowserView: View {
         }
     }
 
-    private func tagGroup(_ label: String, _ tags: [String]) -> some View {
-        HStack(spacing: 4) {
-            if !label.isEmpty {
-                Text(label)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            ForEach(tags, id: \.self) { tag in
-                Button {
-                    viewModel.toggleTag(tag)
-                    viewModel.currentPage = 1
-                    Task { await viewModel.search() }
-                } label: {
-                    Text(tag)
-                        .font(.caption)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(viewModel.selectedTags.contains(tag) ? Color.accentColor : Color(nsColor: .controlBackgroundColor))
-                        .foregroundStyle(viewModel.selectedTags.contains(tag) ? .white : .primary)
-                        .cornerRadius(12)
+    private var ratingSelection: Binding<String?> {
+        Binding(
+            get: { viewModel.selectedRating },
+            set: { viewModel.selectRating($0); Task { await viewModel.search() } }
+        )
+    }
+
+    private var typeSelection: Binding<String?> {
+        Binding(
+            get: { viewModel.selectedType },
+            set: { viewModel.selectType($0); Task { await viewModel.search() } }
+        )
+    }
+
+    private var genreButtonLabel: String {
+        let n = viewModel.activeGenreCount
+        return n == 0 ? "Genres" : "Genres (\(n))"
+    }
+
+    private func genreChip(_ tag: String) -> some View {
+        let state = viewModel.state(of: tag)
+        return Button {
+            viewModel.cycleGenre(tag)
+            Task { await viewModel.search() }
+        } label: {
+            HStack(spacing: 3) {
+                switch state {
+                case .included:
+                    Image(systemName: "checkmark").font(.system(size: 8, weight: .bold))
+                case .excluded:
+                    Image(systemName: "eye.slash.fill").font(.system(size: 8))
+                case .neutral:
+                    EmptyView()
                 }
-                .buttonStyle(.plain)
+                Text(tag)
+                    .font(.caption)
+                    .lineLimit(1)
             }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity)
+            .background(chipBackground(state))
+            .foregroundStyle(chipForeground(state))
+            .cornerRadius(11)
+            .overlay(
+                RoundedRectangle(cornerRadius: 11)
+                    .strokeBorder(state == .excluded ? Color.red.opacity(0.5) : Color.clear, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .help(chipHelp(tag, state))
+    }
+
+    private func chipBackground(_ state: WorkshopViewModel.TagState) -> Color {
+        switch state {
+        case .included: return .accentColor
+        case .excluded: return Color.red.opacity(0.12)
+        case .neutral: return Color(nsColor: .controlBackgroundColor)
+        }
+    }
+
+    private func chipForeground(_ state: WorkshopViewModel.TagState) -> Color {
+        switch state {
+        case .included: return .white
+        case .excluded: return .secondary
+        case .neutral: return .primary
+        }
+    }
+
+    private func chipHelp(_ tag: String, _ state: WorkshopViewModel.TagState) -> String {
+        switch state {
+        case .neutral: return "Show only \(tag)"
+        case .included: return "Hide \(tag) from results"
+        case .excluded: return "Stop hiding \(tag)"
         }
     }
 }
@@ -412,17 +570,54 @@ private struct WorkshopItemCard: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                Spacer(minLength: 2)
+                Button {
+                    viewModel.steamCmd.cancelDownload(workshopId: item.id)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Cancel download")
             }
         case .completed:
-            Label("Downloaded", systemImage: "checkmark.circle.fill")
-                .font(.caption2)
-                .foregroundStyle(.green)
+            HStack(spacing: 4) {
+                Label("Downloaded", systemImage: "checkmark.circle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.green)
+                Spacer(minLength: 2)
+                // Downloading again is how an item the author updated gets updated: the import
+                // replaces the library copy.
+                if viewModel.steamCmd.isLoggedIn {
+                    Button {
+                        viewModel.download(item: item)
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("Download again to get the latest version")
+                }
+            }
         case .failed(let msg):
-            VStack(alignment: .leading) {
+            // A failure is not final. The state used to stick until the app restarted, and the
+            // Download button only exists for `.none`, so a network blip or an expired session
+            // cost the item for the rest of the session.
+            VStack(alignment: .leading, spacing: 4) {
                 Label("Failed", systemImage: "xmark.circle")
                     .font(.caption2)
                     .foregroundStyle(.red)
                 Text(msg).font(.caption2).foregroundStyle(.secondary)
+                if viewModel.steamCmd.isLoggedIn {
+                    Button {
+                        viewModel.download(item: item)
+                    } label: {
+                        Label("Retry", systemImage: "arrow.clockwise")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
             }
         case .none:
             if viewModel.steamCmd.isLoggedIn {

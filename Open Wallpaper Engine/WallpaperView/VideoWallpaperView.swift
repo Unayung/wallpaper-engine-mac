@@ -17,13 +17,15 @@ struct VideoWallpaperView: NSViewRepresentable {
     init(wallpaperViewModel: WallpaperViewModel, screenId: String) {
         self.wallpaperViewModel = wallpaperViewModel
         self.screenId = screenId
-        self._viewModel = StateObject(wrappedValue: VideoWallpaperViewModel(wallpaper: wallpaperViewModel.wallpaper(for: screenId)))
+        self._viewModel = StateObject(wrappedValue: VideoWallpaperViewModel(wallpaper: wallpaperViewModel.wallpaper(for: screenId), screenId: screenId))
     }
 
-    func makeNSView(context: Context) -> AVPlayerView {
-        let view = AVPlayerView()
+    func makeNSView(context: Context) -> VideoWallpaperContainerView {
+        let container = VideoWallpaperContainerView()
+        let view = container.playerView
 
         view.player = viewModel.player
+        viewModel.bind(to: wallpaperViewModel)
 
         // make the video boundary extends to fit the full screen without black background border
         view.videoGravity = .resizeAspectFill
@@ -37,10 +39,11 @@ struct VideoWallpaperView: NSViewRepresentable {
         // mark the flag as unneeded, improve performance and reduce power drain
         view.allowsVideoFrameAnalysis = false
 
-        return view
+        container.showFallback(viewModel.fallbackImageURL)
+        return container
     }
 
-    func updateNSView(_ nsView: AVPlayerView, context: Context) {
+    func updateNSView(_ container: VideoWallpaperContainerView, context: Context) {
         let selectedWallpaper = wallpaperViewModel.wallpaper(for: screenId)
         let currentWallpaper = viewModel.currentWallpaper
 
@@ -49,6 +52,39 @@ struct VideoWallpaperView: NSViewRepresentable {
         }
 
         viewModel.playRate = wallpaperViewModel.playRate
-        viewModel.playVolume = wallpaperViewModel.playVolume
+        viewModel.playVolume = wallpaperViewModel.effectiveVolume(for: screenId)
+        container.showFallback(viewModel.fallbackImageURL)
+    }
+}
+
+/// The player, plus the preview image that replaces it when the video cannot be decoded.
+final class VideoWallpaperContainerView: NSView {
+    let playerView = AVPlayerView()
+    private let fallbackView = NSImageView()
+    private var fallbackURL: URL?
+
+    init() {
+        super.init(frame: .zero)
+        for view in [playerView, fallbackView] as [NSView] {
+            view.frame = bounds
+            view.autoresizingMask = [.width, .height]
+            addSubview(view)
+        }
+        fallbackView.imageScaling = .scaleProportionallyUpOrDown
+        // A preview.gif is the closest thing the package has to the motion it promised.
+        fallbackView.animates = true
+        fallbackView.isHidden = true
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func showFallback(_ url: URL?) {
+        guard url != fallbackURL else { return }
+        fallbackURL = url
+        fallbackView.image = url.flatMap { NSImage(contentsOf: $0) }
+        fallbackView.isHidden = url == nil
+        playerView.isHidden = url != nil
     }
 }

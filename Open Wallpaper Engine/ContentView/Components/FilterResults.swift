@@ -145,236 +145,47 @@ struct FilterResults: View {
                                 }))
                             }
                         }
-                        Group {
-                            FilterSection("Resolution", alignment: .leading) {
-                                VStack(alignment: .leading) {
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text("Widescreen")
-                                            .bold()
-                                        HStack {
-                                            Button("All")  {
-                                                viewModel.widescreenResolution = .all
-                                            }
-                                            Button("None") {
-                                                viewModel.widescreenResolution = .none
-                                            }
-                                        }
-                                        .buttonStyle(.link)
+                        // Source and Tags were greyed out under a `.disabled(true)` along with a
+                        // Resolution section that filtered nothing; Resolution is gone (see
+                        // FilterResultsViewModel.swift for why) and these two now filter.
+                        // Unticking every box in either means "no restriction", not "nothing".
+                        FilterSection("Source", alignment: .leading) {
+                            ForEach(FRSource.options, id: \.flag.rawValue) { option in
+                                Toggle(option.title, isOn: Binding<Bool>(get: {
+                                    viewModel.source.contains(option.flag)
+                                }, set: {
+                                    if $0 {
+                                        viewModel.source.insert(option.flag)
+                                    } else {
+                                        viewModel.source.remove(option.flag)
                                     }
-                                    .padding(.top, 5)
-                                    Group {
-                                        ForEach(Array(zip(FRWidescreenResolution.allOptions.indices, FRWidescreenResolution.allOptions)), id: \.0) { (i, option) in
-                                            Toggle(option, isOn: Binding<Bool>(get: {
-                                                viewModel.widescreenResolution.contains(FRWidescreenResolution(rawValue: 1 << i))
-                                            }, set: {
-                                                if $0 {
-                                                    viewModel.widescreenResolution.insert(FRWidescreenResolution(rawValue: 1 << i))
-                                                } else {
-                                                    viewModel.widescreenResolution.remove(FRWidescreenResolution(rawValue: 1 << i))
-                                                }
-                                                print(String(describing: viewModel.widescreenResolution))
-                                            }))
-                                        }
-                                    }
-                                    .toggleStyle(.checkbox)
-                                    Divider()
-                                        .overlay(Color.accentColor)
-                                }
-                                VStack(alignment: .leading) {
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text("Ultra Widescreen")
-                                            .bold()
-                                        HStack {
-                                            Button("All")  {
-                                                viewModel.ultraWidescreenResolution = .all
-                                            }
-                                            Button("None") {
-                                                viewModel.ultraWidescreenResolution = .none
-                                            }
-                                        }
-                                        .buttonStyle(.link)
-                                    }
-                                    .padding(.top, 5)
-                                    Group {
-                                        ForEach(Array(zip(FRUltraWidescreenResolution.allOptions.indices, FRUltraWidescreenResolution.allOptions)), id: \.0) { (i, option) in
-                                            Toggle(option, isOn: Binding<Bool>(get: {
-                                                viewModel.ultraWidescreenResolution.contains(FRUltraWidescreenResolution(rawValue: 1 << i))
-                                            }, set: {
-                                                if $0 {
-                                                    viewModel.ultraWidescreenResolution.insert(FRUltraWidescreenResolution(rawValue: 1 << i))
-                                                } else {
-                                                    viewModel.ultraWidescreenResolution.remove(FRUltraWidescreenResolution(rawValue: 1 << i))
-                                                }
-                                                print(String(describing: viewModel.ultraWidescreenResolution))
-                                            }))
-                                        }
-                                    }
-                                    .toggleStyle(.checkbox)
-                                    Divider()
-                                        .overlay(Color.accentColor)
-                                }
-                                VStack(alignment: .leading) {
-                                    // MARK: - have trouble
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text("Dual Monitor")
-                                            .bold()
-                                        HStack {
-                                            Button("All")  {
-                                                viewModel.dualscreenResolution = .all
-                                            }
-                                            Button("None") {
-                                                viewModel.dualscreenResolution = .none
-                                            }
-                                        }
-                                        .buttonStyle(.link)
-                                    }
-                                    .padding(.top, 5)
-                                    Group {
-                                        ForEach(Array(zip(FRDualscreenResolution.allOptions.indices, FRDualscreenResolution.allOptions)), id: \.0) { (i, option) in
-                                            Toggle(option, isOn: Binding<Bool>(get: {
-                                                viewModel.dualscreenResolution.contains(FRDualscreenResolution(rawValue: 1 << i))
-                                            }, set: {
-                                                if $0 {
-                                                    viewModel.dualscreenResolution.insert(FRDualscreenResolution(rawValue: 1 << i))
-                                                } else {
-                                                    viewModel.dualscreenResolution.remove(FRDualscreenResolution(rawValue: 1 << i))
-                                                }
-                                                print(String(describing: viewModel.dualscreenResolution))
-                                            }))
-                                        }
-                                    }
-                                    .toggleStyle(.checkbox)
-                                    Divider()
-                                        .overlay(Color.accentColor)
-                                }
-                                VStack(alignment: .leading) {
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text("Triple Monitor")
-                                            .bold()
-                                        HStack {
-                                            Button("All")  {
-                                                viewModel.triplescreenResolution = .all
-                                            }
-                                            Button("None") {
-                                                viewModel.triplescreenResolution = .none
-                                            }
-                                        }
-                                        .buttonStyle(.link)
-                                    }
-                                    .padding(.top, 5)
-                                    Group {
-                                        ForEach(Array(zip(FRTriplescreenResolution.allOptions.indices, FRTriplescreenResolution.allOptions)), id: \.0) { (i, option) in
-                                            Toggle(option, isOn: Binding<Bool>(get: {
-                                                viewModel.triplescreenResolution.contains(FRTriplescreenResolution(rawValue: 1 << i))
-                                            }, set: {
-                                                if $0 {
-                                                    viewModel.triplescreenResolution.insert(FRTriplescreenResolution(rawValue: 1 << i))
-                                                } else {
-                                                    viewModel.triplescreenResolution.remove(FRTriplescreenResolution(rawValue: 1 << i))
-                                                }
-                                                print(String(describing: viewModel.triplescreenResolution))
-                                            }))
-                                        }
-                                    }
-                                    .toggleStyle(.checkbox)
-                                    Divider()
-                                        .overlay(Color.accentColor)
-                                }
-                                VStack(alignment: .leading) {
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text("Potrait Monitor / Phone")
-                                            .bold()
-                                        HStack {
-                                            Button("All")  {
-                                                viewModel.potraitscreenResolution = .all
-                                            }
-                                            Button("None") {
-                                                viewModel.potraitscreenResolution = .none
-                                            }
-                                        }
-                                        .buttonStyle(.link)
-                                    }
-                                    .padding(.top, 5)
-                                    Group {
-                                        ForEach(Array(zip(FRPortraitScreenResolution.allOptions.indices, FRPortraitScreenResolution.allOptions)), id: \.0) { (i, option) in
-                                            Toggle(option, isOn: Binding<Bool>(get: {
-                                                viewModel.potraitscreenResolution.contains(FRPortraitScreenResolution(rawValue: 1 << i))
-                                            }, set: {
-                                                if $0 {
-                                                    viewModel.potraitscreenResolution.insert(FRPortraitScreenResolution(rawValue: 1 << i))
-                                                } else {
-                                                    viewModel.potraitscreenResolution.remove(FRPortraitScreenResolution(rawValue: 1 << i))
-                                                }
-                                                print(String(describing: viewModel.potraitscreenResolution))
-                                            }))
-                                        }
-                                    }
-                                    .toggleStyle(.checkbox)
-                                    Divider()
-                                        .overlay(Color.accentColor)
-                                }
-                                Group {
-                                    ForEach(Array(zip(FRMiscResolution.allOptions.indices, FRMiscResolution.allOptions)), id: \.0) { (i, option) in
-                                        Toggle(option, isOn: Binding<Bool>(get: {
-                                            viewModel.miscResolution.contains(FRMiscResolution(rawValue: 1 << i))
-                                        }, set: {
-                                            if $0 {
-                                                viewModel.miscResolution.insert(FRMiscResolution(rawValue: 1 << i))
-                                            } else {
-                                                viewModel.miscResolution.remove(FRMiscResolution(rawValue: 1 << i))
-                                            }
-                                            print(String(describing: viewModel.miscResolution))
-                                        }))
-                                    }
-                                }
-                                .toggleStyle(.checkbox)
+                                }))
                             }
-                            FilterSection("Source", alignment: .leading) {
-                                Group {
-                                    ForEach(Array(zip(FRSource.allOptions.indices, FRSource.allOptions)), id: \.0) { (i, option) in
-                                        Toggle(option, isOn: Binding<Bool>(get: {
-                                            viewModel.source.contains(FRSource(rawValue: 1 << i))
-                                        }, set: {
-                                            if $0 {
-                                                viewModel.source.insert(FRSource(rawValue: 1 << i))
-                                            } else {
-                                                viewModel.source.remove(FRSource(rawValue: 1 << i))
-                                            }
-                                            print(String(describing: viewModel.source))
-                                        }))
-                                    }
-                                }
-                                .toggleStyle(.checkbox)
-                            }
-                            FilterSection("Tags", alignment: .leading) {
-                                HStack {
-                                    Button("All")  {
-                                        viewModel.tag = .all
-                                    }
-                                    Button("None") {
-                                        viewModel.tag = .none
-                                    }
-                                }
-                                .buttonStyle(.link)
-                                Group {
-                                    ForEach(Array(zip(FRTag.allOptions.indices, FRTag.allOptions)), id: \.0) { (i, option) in
-                                        Toggle(option, isOn: Binding<Bool>(get: {
-                                            viewModel.tag.contains(FRTag(rawValue: 1 << i))
-                                        }, set: {
-                                            if $0 {
-                                                viewModel.tag.insert(FRTag(rawValue: 1 << i))
-                                            } else {
-                                                viewModel.tag.remove(FRTag(rawValue: 1 << i))
-                                            }
-                                            print(String(describing: viewModel.tag))
-                                        }))
-                                    }
-                                }
-                                .toggleStyle(.checkbox)
-                            }
+                            .toggleStyle(.checkbox)
                         }
-                        .disabled(true)
-                        
+                        FilterSection("Tags", alignment: .leading) {
+                            HStack {
+                                Button("All")  {
+                                    viewModel.tag = .all
+                                }
+                                Button("None") {
+                                    viewModel.tag = .none
+                                }
+                            }
+                            .buttonStyle(.link)
+                            ForEach(Array(zip(FRTag.allOptions.indices, FRTag.allOptions)), id: \.0) { (i, option) in
+                                Toggle(option, isOn: Binding<Bool>(get: {
+                                    viewModel.tag.contains(FRTag(rawValue: 1 << i))
+                                }, set: {
+                                    if $0 {
+                                        viewModel.tag.insert(FRTag(rawValue: 1 << i))
+                                    } else {
+                                        viewModel.tag.remove(FRTag(rawValue: 1 << i))
+                                    }
+                                }))
+                            }
+                            .toggleStyle(.checkbox)
+                        }
                     }
                 }
                 .padding(.trailing)

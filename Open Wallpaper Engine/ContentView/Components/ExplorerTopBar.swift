@@ -47,8 +47,11 @@ struct ExplorerTopBar: SubviewOfContentView {
             }
             .buttonStyle(.plain)
             Picker("Sort By", selection: $viewModel.sortingBy) {
+                // Tagged with the enum itself. SwiftUI matches a Picker's tags by exact type,
+                // and `.tag(method.rawValue)` (a String) matched no WEWallpaperSortingMethod
+                // selection, so the popup showed no value and choosing one wrote nothing.
                 ForEach(WEWallpaperSortingMethod.allCases) { method in
-                    Text(method.rawValue).tag(method.rawValue)
+                    Text(method.rawValue).tag(method)
                 }
             }
             .labelsHidden()

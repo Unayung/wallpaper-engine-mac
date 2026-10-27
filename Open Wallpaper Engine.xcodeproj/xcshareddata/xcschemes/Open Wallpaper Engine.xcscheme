@@ -29,28 +29,6 @@
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
       <Testables>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "5EC47E8B2A2DB2E700120CCC"
-               BuildableName = "Open Wallpaper EngineTests.xctest"
-               BlueprintName = "Open Wallpaper EngineTests"
-               ReferencedContainer = "container:Open Wallpaper Engine.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "5EC47E952A2DB2E700120CCC"
-               BuildableName = "Open Wallpaper EngineUITests.xctest"
-               BlueprintName = "Open Wallpaper EngineUITests"
-               ReferencedContainer = "container:Open Wallpaper Engine.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

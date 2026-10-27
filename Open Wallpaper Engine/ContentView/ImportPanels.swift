@@ -28,6 +28,21 @@ struct WPImportError: LocalizedError {
                                                         failureReason: "",
                                                         helpAnchor: "",
                                                         recoverySuggestion: "")
+
+    /// An import that found things but did not import all of them cleanly: say what, item by
+    /// item, instead of the print() each failure used to end in.
+    static func report(_ report: WallpaperImportReport) -> WPImportError {
+        let title = report.imported.isEmpty
+            ? "Nothing Imported"
+            : "Imported \(report.imported.count) Wallpaper(s), With Problems"
+        let lines = (report.skipped.map { "Skipped \($0)" } + report.warnings.map { "Warning — \($0)" })
+        let shown = lines.prefix(8).joined(separator: "\n")
+        let more = lines.count > 8 ? "\n…and \(lines.count - 8) more" : ""
+        return WPImportError(errorDescription: title,
+                             failureReason: shown + more,
+                             helpAnchor: "",
+                             recoverySuggestion: "")
+    }
 }
 
 extension AppDelegate {
@@ -36,71 +51,19 @@ extension AppDelegate {
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true
-        panel.allowedContentTypes = [.folder, .zip]
+        // Everything the importer accepts. A bare video could only be dragged in before.
+        panel.allowedContentTypes = [.folder, .zip, .mpeg4Movie, .quickTimeMovie]
+            + [UTType(filenameExtension: "m4v")].compactMap { $0 }
         panel.beginSheetModal(for: self.mainWindowController.window) { [weak self] response in
-            if response != .OK { return }
-            guard !panel.urls.isEmpty else { return }
-
-            let fm = FileManager.default
-            let docsDir = fm.wallpapersDirectory
-
-            var wallpaperURLs: [URL] = []
-            var zipURLs: [URL] = []
-
-            for url in panel.urls {
-                if url.pathExtension.lowercased() == "zip" {
-                    zipURLs.append(url)
-                } else if fm.fileExists(atPath: url.appending(path: "project.json").path) {
-                    wallpaperURLs.append(url)
-                } else {
-                    // Scan immediate children for wallpaper folders
-                    guard let children = try? fm.contentsOfDirectory(
-                        at: url, includingPropertiesForKeys: [.isDirectoryKey],
-                        options: .skipsHiddenFiles
-                    ) else { continue }
-                    for child in children {
-                        var isDir: ObjCBool = false
-                        if fm.fileExists(atPath: child.path, isDirectory: &isDir),
-                           isDir.boolValue,
-                           fm.fileExists(atPath: child.appending(path: "project.json").path) {
-                            wallpaperURLs.append(child)
-                        }
-                    }
-                }
-            }
-
-            guard !wallpaperURLs.isEmpty || !zipURLs.isEmpty else {
+            guard response == .OK, !panel.urls.isEmpty else { return }
+            let urls = panel.urls
+            // Same importer as drag-and-drop, so both accept the same things by the same
+            // rules. Off the main thread: it copies whole wallpaper folders.
+            DispatchQueue.global(qos: .userInitiated).async {
+                let report = WallpaperImporter.importItems(at: urls)
                 DispatchQueue.main.async {
-                    self?.contentViewModel.alertImportModal(which: .doesNotContainWallpaper)
+                    self?.contentViewModel.finishImport(report)
                 }
-                return
-            }
-
-            DispatchQueue.main.async {
-                for url in wallpaperURLs {
-                    let dest = docsDir.appending(path: url.lastPathComponent)
-                    if !fm.fileExists(atPath: dest.path) {
-                        try? fm.copyItem(at: url, to: dest)
-                    }
-                }
-                for url in zipURLs {
-                    ZipImporter.importZip(at: url)
-                }
-            }
-        }
-    }
-    
-    @objc func openImportFromFoldersPanel() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = true
-        panel.beginSheetModal(for: self.mainWindowController.window) { response in
-            if response != .OK { return }
-            print(String(describing: panel.urls))
-            
-            DispatchQueue.main.async {
-                self.contentViewModel.wallpaperUrls.append(contentsOf: panel.urls)
             }
         }
     }

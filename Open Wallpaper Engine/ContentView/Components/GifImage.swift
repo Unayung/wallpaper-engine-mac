@@ -28,6 +28,13 @@ struct GifImage: NSViewRepresentable {
         self.animates = animates
     }
     
+    /// What the view last loaded, so updates that do not change it cost nothing.
+    final class Coordinator {
+        var loaded: URL?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeNSView(context: Context) -> NSImageView {
         let nsView = NSImageView()
         
@@ -35,29 +42,14 @@ struct GifImage: NSViewRepresentable {
         nsView.imageScaling = .scaleProportionallyUpOrDown
         nsView.animates = animates
         
-        if let gifName = self.gifName {
-            if let url = Bundle.main.url(forResource: gifName, withExtension: "gif") {
-                if let image = NSImage(contentsOf: url) {
-                    let gifRep = image.representations[0] as? NSBitmapImageRep
-                    gifRep?.setProperty(.loopCount, withValue: 0)
-                    nsView.image = image
-                }
-            }
-        }
-        if let gifUrl = self.gifUrl {
-            if let image = NSImage(contentsOf: gifUrl) {
-                let gifRep = image.representations[0] as? NSBitmapImageRep
-                gifRep?.setProperty(.loopCount, withValue: 0)
-                nsView.image = image
-            }
-        }
+        updateModifiers(nsView, context: context)
         
         return nsView
     }
     
     func updateNSView(_ nsView: NSImageView, context: Context) {
         nsView.animates = animates
-        updateModifiers(nsView)
+        updateModifiers(nsView, context: context)
     }
     
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSImageView, context: Context) -> CGSize? {
@@ -69,21 +61,27 @@ struct GifImage: NSViewRepresentable {
         }
     }
     
-    private func updateModifiers(_ nsView: NSImageView) {
+    private var sourceURL: URL? {
         if let gifName = self.gifName {
-            if let url = Bundle.main.url(forResource: gifName, withExtension: "gif") {
-                if let image = NSImage(contentsOf: url) {
-                    let gifRep = image.representations[0] as? NSBitmapImageRep
-                    gifRep?.setProperty(.loopCount, withValue: 0)
-                    nsView.image = image
-                }
-            }
+            return Bundle.main.url(forResource: gifName, withExtension: "gif")
         }
-        if let gifUrl = self.gifUrl {
-            if let image = NSImage(contentsOf: gifUrl) {
-                let gifRep = image.representations[0] as? NSBitmapImageRep
+        return gifUrl
+    }
+
+    private func updateModifiers(_ nsView: NSImageView, context: Context) {
+        // Decode only when the source changes. updateNSView runs on every re-render of the
+        // parent — for the preview pane, every tick of its Volume slider — and reloading
+        // here re-read and re-decoded the file each time (58 library previews are GIFs of
+        // up to 1 MB).
+        let url = sourceURL
+        if url != context.coordinator.loaded {
+            context.coordinator.loaded = url
+            if let url, let image = NSImage(contentsOf: url) {
+                let gifRep = image.representations.first as? NSBitmapImageRep
                 gifRep?.setProperty(.loopCount, withValue: 0)
                 nsView.image = image
+            } else {
+                nsView.image = nil
             }
         }
         if self.isResizable {

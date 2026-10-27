@@ -1,0 +1,46 @@
+#!/bin/sh
+#
+# Check that every wallpaper in ~/Documents/Open Wallpaper Engine would load, whatever its type.
+#
+#   Tools/appcheck                  # the whole library: a PASS/FAIL line each, then the tally
+#   Tools/appcheck <id> [id ...]    # just these
+#
+# Exits non-zero when any wallpaper fails, so it can gate a change. Like Tools/scenecheck it
+# compiles the app's own sources rather than reimplementing them, and is deliberately not an
+# Xcode target: it links a subset of the app with its own main.swift.
+#
+set -e
+
+case "$1" in -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;; esac
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+dir="$root/Tools/app-check"
+src="$root/Open Wallpaper Engine"
+out="${TMPDIR:-/tmp}/appcheck"
+
+# Rebuild only when something it is built from has changed.
+newest=$(find "$dir/main.swift" "$src/Services" -name '*.swift' -newer "$out" 2>/dev/null | head -1 || true)
+if [ ! -x "$out" ] || [ -n "$newest" ]; then
+    echo "building appcheck" >&2
+    swiftc -O -o "$out" "$dir/main.swift" \
+        "$src/Services/SceneParsers/SceneModels.swift" \
+        "$src/Services/SceneParsers/SceneAnimation.swift" \
+        "$src/Services/SceneParsers/SceneEvaluator.swift" \
+        "$src/Services/SceneParsers/WallpaperSKScene.swift" \
+        "$src/Services/SceneParsers/WEShaderTranslator.swift" \
+        "$src/Services/SceneParsers/SceneEffectBuilder.swift" \
+        "$src/Services/SceneParsers/SceneTextLayer.swift" \
+        "$src/Services/SceneParsers/SceneScriptRuntime.swift" \
+        "$src/Services/SceneParsers/SceneBackdropBlend.swift" \
+        "$src/Services/SceneParsers/PKGParser.swift" \
+        "$src/Services/SceneParsers/TEXParser.swift" \
+        "$src/Services/SceneRuntime/MobBehavior.swift" \
+        "$src/Services/SceneRuntime/MotionItemBehavior.swift" \
+        "$src/Services/SceneRuntime/ScriptedOriginMotionBehavior.swift" \
+        "$src/Services/SceneWallpaperViewModel.swift" \
+        "$src/Services/WEProject.swift" \
+        "$src/Services/WallpaperDirectory.swift"
+fi
+
+# The scene loader narrates every texture it resolves on stderr, which buries the report.
+exec "$out" "$@" 2>/dev/null

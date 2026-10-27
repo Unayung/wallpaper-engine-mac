@@ -25,26 +25,66 @@ struct WallpaperPreview: SubviewOfContentView {
         self.wallpaperViewModel = wallpaperViewModel
     }
     
-    var wallpaperSize: String {
-        guard let sizeBytes = try? wallpaperViewModel.currentWallpaper.wallpaperDirectory.directoryTotalAllocatedSize(includingSubfolders: true)
-        else {
-            return "??? MB"
-        }
-        return ByteCountFormatter.string(fromByteCount: Int64(sizeBytes), countStyle: .file)
+    /// The selected wallpaper's size on disk, measured once per directory by `.task(id:)`.
+    ///
+    /// It used to be a computed property read in `body`: a recursive walk of the whole folder
+    /// on every render, and this pane re-renders on every tick of its own Volume and Playback
+    /// Rate sliders. It also walked the library entry as given, and most entries are symlinks
+    /// into Steam's workshop folder, which `directoryTotalAllocatedSize` does not follow — 122
+    /// of the 154 listed wallpapers read "??? MB". `WEWallpaper.wallpaperSize` resolves the
+    /// link first.
+    @State private var wallpaperSize = "…"
+
+    private static func measuredSize(of wallpaper: WEWallpaper) async -> String {
+        let bytes = await Task.detached(priority: .utility) { wallpaper.wallpaperSize }.value
+        // 0 is what `wallpaperSize` reports when the folder cannot be read.
+        guard bytes > 0 else { return "??? MB" }
+        return ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
-    
+
+    // MARK: Scheme colour
+
+    /// Only wallpapers that declare `general.properties.schemecolor` have one to change.
+    var hasSchemeColor: Bool {
+        wallpaperViewModel.currentWallpaper.project.general?.properties.schemecolor != nil
+    }
+
+    /// Reads and writes the wallpaper's own scheme colour. Wallpaper Engine stores it as
+    /// three space-separated floats in 0...1.
+    var schemeColor: Binding<Color> {
+        Binding(
+            get: {
+                guard let raw = wallpaperViewModel.currentWallpaper
+                    .project.general?.properties.schemecolor?.value else { return .gray }
+                let c = raw.parseColor()
+                return Color(red: c.r, green: c.g, blue: c.b)
+            },
+            set: { newValue in
+                guard let srgb = NSColor(newValue).usingColorSpace(.sRGB) else { return }
+                let encoded = String(format: "%.5f %.5f %.5f",
+                                     srgb.redComponent, srgb.greenComponent, srgb.blueComponent)
+
+                var wallpaper = wallpaperViewModel.currentWallpaper
+                // Patch the file surgically — encoding WEProject would drop ratingsex,
+                // ratingviolence and every other property it does not model.
+                guard ProjectJSONPatch.setSchemeColor(
+                    encoded, inWallpaperAt: wallpaper.wallpaperDirectory
+                ) else { return }
+
+                wallpaper.project.general?.properties.schemecolor?.value = encoded
+                wallpaperViewModel.currentWallpaper = wallpaper
+            }
+        )
+    }
+
     var body: some View {
         VStack {
             ScrollView {
                 VStack(spacing: 16) {
                     VStack(spacing: 10) {
-                        GifImage(contentsOf: { (url: URL) in
-                            if let selectedProject = try? JSONDecoder()
-                                .decode(WEProject.self, from: Data(contentsOf: url.appending(path: "project.json"))) {
-                                return url.appending(path: selectedProject.preview)
-                            }
-                            return Bundle.main.url(forResource: "WallpaperNotFound", withExtension: "mp4")!
-                        }(wallpaperViewModel.currentWallpaper.wallpaperDirectory))
+                        // This pane re-renders on every tick of its own Volume and Playback
+                        // Rate sliders, so it must not read project.json from disk here.
+                        GifImage(contentsOf: wallpaperViewModel.currentWallpaper.previewURL)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .background(Color(nsColor: NSColor.controlBackgroundColor))
@@ -56,16 +96,19 @@ struct WallpaperPreview: SubviewOfContentView {
                                 TextField("Wallpaper Title", text: $title)
                                     .onSubmit {
                                         var wallpaper = wallpaperViewModel.currentWallpaper
-                                        
-                                        wallpaper.project.title = title
-                                        
-                                        guard let data = try? JSONEncoder().encode(wallpaper.project) else { return }
-                                        
-                                        try? data.write(to: wallpaper.wallpaperDirectory.appending(path: "project.json"), options: .atomic)
-                                        
-                                        wallpaperViewModel.currentWallpaper = wallpaper
-                                        
                                         isEditingId = ""
+
+                                        // Patch the one key. Re-encoding WEProject here used to
+                                        // rewrite project.json from the handful of keys the struct
+                                        // models, and 64 of 155 library projects lost data that way
+                                        // (14,634 leaf values, 10,526 of them user properties).
+                                        guard ProjectJSONPatch.setTitle(
+                                            title, inWallpaperAt: wallpaper.wallpaperDirectory
+                                        ) else { return }
+
+                                        wallpaper.project.title = title
+                                        wallpaperViewModel.currentWallpaper = wallpaper
+                                        viewModel.refresh() // the grid renders a snapshot
                                     }
                             } else {
                                 Text(wallpaperViewModel.currentWallpaper.project.title.isEmpty ? "Untitled" : wallpaperViewModel.currentWallpaper.project.title)
@@ -104,6 +147,14 @@ struct WallpaperPreview: SubviewOfContentView {
                     HStack {
                         Text(wallpaperViewModel.currentWallpaper.project.type)
                         Text(wallpaperSize)
+                            .task(id: wallpaperViewModel.currentWallpaper.wallpaperDirectory) {
+                                let wallpaper = wallpaperViewModel.currentWallpaper
+                                wallpaperSize = "…"
+                                let measured = await Self.measuredSize(of: wallpaper)
+                                // Superseded by another selection while measuring.
+                                guard !Task.isCancelled else { return }
+                                wallpaperSize = measured
+                            }
                     }
                     .font(.footnote)
                     
@@ -144,12 +195,18 @@ struct WallpaperPreview: SubviewOfContentView {
                                     tags = Array(Set(tags)) // remove duplicate items
                                     
                                     wallpaper.project.tags = tags.sorted()
-                                    
-                                    guard let data = try? JSONEncoder().encode(wallpaper.project) else { return }
-                                    
-                                    try? data.write(to: wallpaper.wallpaperDirectory.appending(path: "project.json"), options: .atomic)
-                                    
+
+                                    // Patch just the tags array. Encoding WEProject here used
+                                    // to rewrite the whole file through a model that knows one
+                                    // of the 200+ keys a Workshop project.json can carry, so
+                                    // adding a tag silently deleted the rest.
+                                    guard ProjectJSONPatch.setTags(
+                                        wallpaper.project.tags ?? [],
+                                        inWallpaperAt: wallpaper.wallpaperDirectory
+                                    ) else { return }
+
                                     wallpaperViewModel.currentWallpaper = wallpaper
+                                    viewModel.refresh() // tags are searchable; the grid renders a snapshot
                                 }
                         }
                     }
@@ -184,14 +241,17 @@ struct WallpaperPreview: SubviewOfContentView {
                         }
                     }
                     VStack(spacing: 16) {
-                        ColorPicker(selection: .constant(.red), supportsOpacity: true) {
+                        ColorPicker(selection: schemeColor, supportsOpacity: false) {
                             HStack {
                                 Label("Scheme Color", systemImage: "paintpalette.fill")
                                 Spacer()
                             }
                         }
-                        .opacity(0.5)
-                        .disabled(true)
+                        .opacity(hasSchemeColor ? 1 : 0.5)
+                        .disabled(!hasSchemeColor)
+                        .help(hasSchemeColor
+                              ? "Saved into this wallpaper's project.json"
+                              : "This wallpaper does not define a scheme colour")
                         switch wallpaperViewModel.currentWallpaper.project.type.lowercased() {
                         case "video":
                             HStack {
@@ -300,22 +360,22 @@ struct WallpaperPreview: SubviewOfContentView {
                             if hoveredTag == tag {
                                 Button {
                                     var wallpaper = wallpaperViewModel.currentWallpaper
-                                    
-                                    guard var tags = wallpaper.project.tags else { return } // else case seems impossible, however much safer
-                                    
-                                    tags = Array(Set(tags)) // remove duplicate items
-                                    
-                                    guard let index = tags.firstIndex(where: { $0 == tag }) else { return }
-                                    
-                                    tags.remove(at: index)
-                                    
-                                    wallpaper.project.tags = tags
-                                    
-                                    guard let data = try? JSONEncoder().encode(wallpaper.project) else { return }
-                                    
-                                    try? data.write(to: wallpaper.wallpaperDirectory.appending(path: "project.json"), options: .atomic)
-                                    
+
+                                    guard let tags = wallpaper.project.tags else { return } // else case seems impossible, however much safer
+
+                                    // Keep the authored order. Deduplicating through a Set used to
+                                    // shuffle the remaining tags on every removal.
+                                    let remaining = tags.filter { $0 != tag }
+                                    guard remaining.count != tags.count else { return }
+
+                                    // Same lossy-encoding trap as the title: patch, don't re-encode.
+                                    guard ProjectJSONPatch.setTags(
+                                        remaining, inWallpaperAt: wallpaper.wallpaperDirectory
+                                    ) else { return }
+
+                                    wallpaper.project.tags = remaining
                                     wallpaperViewModel.currentWallpaper = wallpaper
+                                    viewModel.refresh() // tags are searchable; the grid renders a snapshot
                                 } label: {
                                     Image(systemName: "xmark.circle.fill")
                                 }

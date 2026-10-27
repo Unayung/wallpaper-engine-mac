@@ -19,7 +19,7 @@ struct WallpaperExplorer: SubviewOfContentView {
     var body: some View {
         ScrollView {
             // MARK: Items
-            if viewModel.autoRefreshWallpapers.isEmpty {
+            if viewModel.wallpapers.isEmpty {
                 HStack {
                     Spacer()
                     Text("""
@@ -39,7 +39,10 @@ struct WallpaperExplorer: SubviewOfContentView {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: viewModel.explorerIconSize, 
                                                        maximum: viewModel.explorerIconSize * 2)
                 )], alignment: .leading) {
-                    ForEach(Array(viewModel.autoRefreshWallpapers.enumerated()), id: \.0) { (index, wallpaper) in
+                    // Rendered from the snapshot, never the computed chain: see refresh().
+                    // Keyed by folder rather than position, so a search or re-sort moves
+                    // tiles instead of handing each slot a different wallpaper to reload.
+                    ForEach(Array(viewModel.wallpapers.enumerated()), id: \.1.wallpaperDirectory) { (index, wallpaper) in
                         ExplorerItem(viewModel: viewModel, wallpaperViewModel: wallpaperViewModel, wallpaper: wallpaper, index: index)
                             .contextMenu {
                                 ExplorerItemMenu(contentViewModel: viewModel, wallpaperViewModel: wallpaperViewModel, current: wallpaper)
@@ -52,19 +55,10 @@ struct WallpaperExplorer: SubviewOfContentView {
                 .padding(.trailing)
             }
         }
-        .overlay {
-            VStack {
-                Spacer()
-                HStack {
-                    ForEach(0..<viewModel.maxPage, id: \.self) { page in
-                        Button("\(page + 1)") {
-                            viewModel.currentPage = page + 1
-                        }
-                    }
-                }
-                .padding(.bottom)
-            }
-        }
+        // No pagination. There used to be page buttons over the bottom of the grid, but the
+        // slicing behind them was commented out, so they changed nothing — and the grid is
+        // a LazyVGrid, which already only builds the tiles on screen, so paging would buy
+        // nothing back.
     }
 }
 

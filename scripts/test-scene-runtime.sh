@@ -4,22 +4,32 @@ set -euo pipefail
 repo_root="${0:A:h:h}"
 module_cache="/private/tmp/owe-scene-tests-module-cache"
 test_binary="/private/tmp/owe-scene-runtime-tests"
+src="$repo_root/Open Wallpaper Engine/Services"
 
 mkdir -p "$module_cache"
 
-env DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-    xcrun swiftc \
+# The scene sources the behaviours bind to, as Tools/scenecheck compiles them.
+xcrun swiftc \
     -swift-version 5 \
     -module-cache-path "$module_cache" \
-    "$repo_root/Open Wallpaper Engine/Services/SceneParsers/SceneModels.swift" \
-    "$repo_root/Open Wallpaper Engine/Services/SceneParsers/PKGParser.swift" \
-    "$repo_root/Open Wallpaper Engine/Services/SceneParsers/TEXParser.swift" \
-    "$repo_root/Open Wallpaper Engine/Services/SceneRuntime/MobBehavior.swift" \
-    "$repo_root/Open Wallpaper Engine/Services/SceneRuntime/MotionItemBehavior.swift" \
-    "$repo_root/Open Wallpaper Engine/Services/SceneRuntime/ScriptedOriginMotionBehavior.swift" \
-    "$repo_root/Open Wallpaper Engine/Services/SceneRuntime/SceneHierarchyResolver.swift" \
-    "$repo_root/Open Wallpaper Engine/Services/SceneRuntime/WESpriteScene.swift" \
-    "$repo_root/Open Wallpaper Engine/Services/SceneRuntime/SceneAudioController.swift" \
+    "$src/SceneParsers/SceneModels.swift" \
+    "$src/SceneParsers/SceneAnimation.swift" \
+    "$src/SceneParsers/SceneEvaluator.swift" \
+    "$src/SceneParsers/WallpaperSKScene.swift" \
+    "$src/SceneParsers/WEShaderTranslator.swift" \
+    "$src/SceneParsers/SceneEffectBuilder.swift" \
+    "$src/SceneParsers/SceneTextLayer.swift" \
+    "$src/SceneParsers/SceneScriptRuntime.swift" \
+    "$src/SceneParsers/SceneBackdropBlend.swift" \
+    "$src/SceneParsers/PKGParser.swift" \
+    "$src/SceneParsers/TEXParser.swift" \
+    "$src/SceneWallpaperViewModel.swift" \
+    "$src/WEProject.swift" \
+    "$src/WallpaperDirectory.swift" \
+    "$src/SceneRuntime/MobBehavior.swift" \
+    "$src/SceneRuntime/MotionItemBehavior.swift" \
+    "$src/SceneRuntime/ScriptedOriginMotionBehavior.swift" \
+    "$repo_root/Tests/SceneRuntimeTests/Stubs.swift" \
     "$repo_root/Tests/SceneRuntimeTests/main.swift" \
     -o "$test_binary"
 

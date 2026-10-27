@@ -94,13 +94,11 @@ struct ContentView: View {
                             isPresented: $viewModel.isUnsubscribeConfirming) {
             if let url = viewModel.hoveredWallpaper?.wallpaperDirectory {
                 Button("Delete Immediately", role: .destructive) {
-                    try? FileManager.default.removeItem(at: url)
-                    wallpaperViewModel.removeWallpaperFromAllScreens(directory: url)
+                    unsubscribe([url], toTrash: false)
                     viewModel.hoveredWallpaper = nil
                 }
                 Button("Move to Trash") {
-                    try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
-                    wallpaperViewModel.removeWallpaperFromAllScreens(directory: url)
+                    unsubscribe([url], toTrash: true)
                     viewModel.hoveredWallpaper = nil
                 }
             }
@@ -113,17 +111,11 @@ struct ContentView: View {
         .confirmationDialog("Batch Unsubscribe Confirmation",
                             isPresented: $viewModel.isBatchUnsubscribeConfirming) {
             Button("Delete All \(viewModel.selectedWallpapers.count) Immediately", role: .destructive) {
-                for url in viewModel.selectedWallpapers {
-                    try? FileManager.default.removeItem(at: url)
-                    wallpaperViewModel.removeWallpaperFromAllScreens(directory: url)
-                }
+                unsubscribe(Array(viewModel.selectedWallpapers), toTrash: false)
                 viewModel.clearSelection()
             }
             Button("Move All \(viewModel.selectedWallpapers.count) to Trash") {
-                for url in viewModel.selectedWallpapers {
-                    try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
-                    wallpaperViewModel.removeWallpaperFromAllScreens(directory: url)
-                }
+                unsubscribe(Array(viewModel.selectedWallpapers), toTrash: true)
                 viewModel.clearSelection()
             }
             Button("Cancel", role: .cancel) {}
@@ -133,8 +125,13 @@ struct ContentView: View {
             let suffix = items.count > 3 ? " and \(items.count - 3) more" : ""
             Text("Unsubscribe \(items.count) wallpapers: \(names)\(suffix)")
         }
-        .alert(isPresented: $viewModel.importAlertPresented, error: viewModel.importAlertError) {
+        .alert(isPresented: $viewModel.importAlertPresented, error: viewModel.importAlertError) { _ in
 
+        } message: { error in
+            // Spelled out because the per-item import report lives in failureReason, and
+            // the message-less overload is not guaranteed to show it.
+            Text([error.failureReason, error.recoverySuggestion]
+                .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n\n"))
         }
         .sheet(isPresented: $globalSettingsViewModel.isFirstLaunch) {
             FirstLaunchView()
@@ -150,6 +147,36 @@ struct ContentView: View {
                 .frame(width: 600, height: 300)
         }
         .frame(minWidth: 1000, minHeight: 640, idealHeight: 800)
+    }
+
+    /// Delete or trash wallpaper folders, unassigning only the ones actually removed.
+    ///
+    /// The old buttons ran `try?` and then unassigned regardless, so a failed delete (a
+    /// permission error, a volume without a Trash) left the wallpaper on disk and in the
+    /// grid, took it off every screen, and said nothing.
+    private func unsubscribe(_ urls: [URL], toTrash: Bool) {
+        var failures: [String] = []
+        for url in urls {
+            do {
+                if toTrash {
+                    try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+                } else {
+                    try FileManager.default.removeItem(at: url)
+                }
+                wallpaperViewModel.removeWallpaperFromAllScreens(directory: url)
+            } catch {
+                failures.append("\(url.lastPathComponent): \(error.localizedDescription)")
+            }
+        }
+        viewModel.refresh()
+        if !failures.isEmpty {
+            viewModel.alertImportModal(which: WPImportError(
+                errorDescription: "Could Not Unsubscribe \(failures.count) Wallpaper(s)",
+                failureReason: failures.prefix(8).joined(separator: "\n"),
+                helpAnchor: "",
+                recoverySuggestion: ""
+            ))
+        }
     }
 }
 

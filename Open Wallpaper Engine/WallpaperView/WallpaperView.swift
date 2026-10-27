@@ -18,7 +18,9 @@ struct WallpaperView: View {
         case "video":
             VideoWallpaperView(wallpaperViewModel: viewModel, screenId: screenId)
         case "scene":
-            SceneWallpaperView(wallpaperViewModel: viewModel, screenId: screenId)
+            SceneWallpaperView(wallpaperViewModel: viewModel,
+                               globalSettings: AppDelegate.shared.globalSettingsViewModel,
+                               screenId: screenId)
         case "web":
             WebWallpaperView(wallpaperViewModel: viewModel, screenId: screenId)
         default:

@@ -14,21 +14,21 @@ protocol SettingsPage: View {
     init(globalSettings: GlobalSettingsViewModel)
 }
 
+// `GlobalSettingsViewModel.selection` indexes the pages in toolbar order; these three and the
+// switch in `SettingsView` are the only places that know the numbers. A "Plugins" page used to
+// sit at 2 with About at 3; it held placeholder text and one real toggle, which now lives in
+// General.
 extension AppDelegate {
     @objc func jumpToPerformance() {
         self.globalSettingsViewModel.selection = 0
     }
-    
+
     @objc func jumpToGeneral() {
         self.globalSettingsViewModel.selection = 1
     }
-    
-    @objc func jumpToPlugins() {
-        self.globalSettingsViewModel.selection = 2
-    }
-    
+
     @objc func jumpToAbout() {
-        self.globalSettingsViewModel.selection = 3
+        self.globalSettingsViewModel.selection = 2
     }
 }
 
@@ -44,42 +44,14 @@ struct SettingsView: View {
                 case 1:
                     GeneralPage(globalSettings: viewModel)
                 case 2:
-                    PluginsPage(globalSettings: viewModel)
-                case 3:
                     AboutUsView()
                 default:
                     fatalError()
                 }
             }
             .frame(minHeight: 400, maxHeight: 800)
-            
-            
-            HStack {
-                if let savedSettings = try? JSONDecoder()
-                    .decode(GlobalSettings.self,
-                        from: UserDefaults.standard.data(forKey: "GlobalSettings")
-                            ?? Data()), viewModel.settings != savedSettings {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .foregroundStyle(.yellow)
-                    Text("Edited")
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button {
-                    viewModel.save()
-                    AppDelegate.shared.settingsWindow.close()
-                } label: {
-                    Text("OK").frame(width: 50)
-                }
-                .buttonStyle(.borderedProminent)
-                Button {
-                    /*here should be a call of viewModel.reset() but I move it to the delegate */
-                    AppDelegate.shared.settingsWindow.close()
-                } label: {
-                    Text("Cancel").frame(width: 50)
-                }
-            }
-            .padding(20)
+            // No OK / Cancel / "Edited": every control applies the moment it changes (see
+            // `GlobalSettingsViewModel.settings`), and those three only pretended otherwise.
         }
         .frame(minWidth: 500)
     }
@@ -87,15 +59,15 @@ struct SettingsView: View {
 
 extension AppDelegate: NSToolbarDelegate {
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [SettingsToolbarIdentifiers.performance, SettingsToolbarIdentifiers.general, SettingsToolbarIdentifiers.plugins, SettingsToolbarIdentifiers.about]
+        [SettingsToolbarIdentifiers.performance, SettingsToolbarIdentifiers.general, SettingsToolbarIdentifiers.about]
     }
         
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [SettingsToolbarIdentifiers.performance, SettingsToolbarIdentifiers.general, SettingsToolbarIdentifiers.plugins, SettingsToolbarIdentifiers.about]
+        [SettingsToolbarIdentifiers.performance, SettingsToolbarIdentifiers.general, SettingsToolbarIdentifiers.about]
     }
     
     func toolbarSelectableItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [SettingsToolbarIdentifiers.performance, SettingsToolbarIdentifiers.general, SettingsToolbarIdentifiers.plugins, SettingsToolbarIdentifiers.about]
+        [SettingsToolbarIdentifiers.performance, SettingsToolbarIdentifiers.general, SettingsToolbarIdentifiers.about]
     }
     
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
@@ -111,11 +83,6 @@ extension AppDelegate: NSToolbarDelegate {
             toolbarItem.action = #selector(jumpToGeneral)
             toolbarItem.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
             toolbarItem.label = String(localized: "General")
-            
-        case SettingsToolbarIdentifiers.plugins:
-            toolbarItem.action = #selector(jumpToPlugins)
-            toolbarItem.image = NSImage(systemSymbolName: "puzzlepiece.extension", accessibilityDescription: nil)
-            toolbarItem.label = String(localized: "Plugins")
             
         case SettingsToolbarIdentifiers.about:
             toolbarItem.action = #selector(jumpToAbout)
@@ -137,7 +104,7 @@ struct SettingsView_Previews: PreviewProvider {
         SettingsView()
             .environmentObject({ () -> GlobalSettingsViewModel in 
                 let viewModel = GlobalSettingsViewModel()
-                viewModel.selection = 2
+                viewModel.selection = 1
                 return viewModel
             }())
             .frame(width: 500, height: 600)

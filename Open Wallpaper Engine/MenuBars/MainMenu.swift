@@ -32,8 +32,10 @@ extension AppDelegate {
         let importMenu = NSMenuItem(title: String(localized: "Import"), action: nil, keyEquivalent: "")
         importMenu.submenu = NSMenu()
         importMenu.submenu?.items = [
-            .init(title: String(localized: "Wallpaper from Folder"), action: #selector(openImportFromFolderPanel), keyEquivalent: "i"),
-            .init(title: String(localized: "Wallpapers in Folders"), action: nil, keyEquivalent: "")
+            // One item: the panel takes wallpaper folders, folders of them, zips and videos.
+            // "Wallpapers in Folders" had no action and sat permanently disabled; the panel
+            // behind it only appended to an AppStorage list nothing read.
+            .init(title: String(localized: "Wallpaper from Folder"), action: #selector(openImportFromFolderPanel), keyEquivalent: "i")
         ]
         
         // 文件菜单

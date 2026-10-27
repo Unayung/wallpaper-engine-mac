@@ -91,6 +91,12 @@ class WorkshopAPIService {
         queryItems.append(URLQueryItem(name: "key", value: apiKey))
 
         components.queryItems = queryItems
+        // URLComponents leaves '+' as is in a query, being a legal character there, but Steam
+        // (like most form decoders) reads it as a space: a search for "C++" went out as
+        // `search_text=C++` and was read as "C  ", and a tag holding '+' is mangled the same
+        // way. Encode it by hand.
+        components.percentEncodedQuery = components.percentEncodedQuery?
+            .replacingOccurrences(of: "+", with: "%2B")
 
         guard let url = components.url else {
             throw WorkshopAPIError.invalidURL

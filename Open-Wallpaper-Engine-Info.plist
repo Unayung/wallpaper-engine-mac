@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Open Wallpaper Engine stores your wallpaper packages in a folder inside Documents.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Open Wallpaper Engine reads wallpapers you download from the Steam Workshop.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSExceptionDomains</key>

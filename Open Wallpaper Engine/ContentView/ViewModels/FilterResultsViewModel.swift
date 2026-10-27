@@ -73,141 +73,73 @@ struct FRAgeRating: FilterResultsModel {
     static let none: FRAgeRating    = []
 }
 
-struct FRWidescreenResolution: FilterResultsModel {
-    let rawValue: Int
-    
-    static let allOptions = [
-        "StandardDefinition",
-        "1280x720",
-        "1920x1080-FullHD",
-        "2560x1440",
-        "3840x2160-4K"
-    ]
-    
-    static let standardDefinition   = Self.init(rawValue: 1 << 0)
-    static let resolution1280x720   = Self.init(rawValue: 1 << 1)
-    static let resolution1920x1080  = Self.init(rawValue: 1 << 2)
-    static let resolution2560x1440  = Self.init(rawValue: 1 << 3)
-    static let resolution3840x2160  = Self.init(rawValue: 1 << 4)
-    
-    static let all: Self            = [.standardDefinition, resolution1280x720, resolution1920x1080, .resolution2560x1440, .resolution3840x2160]
-    static let none: Self           = []
-}
+// There is no Resolution filter, deliberately. The sidebar used to offer Wallpaper Engine's 21
+// resolution boxes (Widescreen 1280x720 … Triple 11520x2160, Standard, Other, Dynamic), greyed
+// out and read by nothing. The data does exist — every scene declares
+// `general.orthogonalprojection` in its scene.json and every video track has a size, and all 148
+// wallpapers in the measured library resolve — but it was declined, for two reasons measured on
+// 2026-10-27:
+// - Cost. Read uncached, it takes 25–36 ms for the 93 scenes (scene.json out of scene.pkg) and
+//   57–61 ms for the 52 videos (AVFoundation track size), against 4.5 ms for the whole library
+//   chain, which re-runs on the main thread on every refresh. It would need an index built off
+//   the main thread, keyed by path + mtime, and a window in which that index is incomplete.
+// - Meaning. Those boxes are Workshop tags an author picks, and Wallpaper Engine's own filter
+//   matches the tag, which project.json does not carry. Only 97 of the 148 measured sizes fall on
+//   a listed resolution; the other 45 (2499x1406, 3840x6000, 1082x1072, …) would have to land in
+//   "Standard" or "Other" by thresholds this app would invent.
+// The old FR*Resolution UserDefaults keys are simply no longer read.
 
-struct FRUltraWidescreenResolution: FilterResultsModel {
+/// Where a wallpaper came from. Like Tags (and unlike Type), an empty selection means no
+/// restriction, and so does one holding only bits no option uses any more: Wallpaper Engine's
+/// third source, "Official", was dropped because nothing in a package says it shipped with
+/// Wallpaper Engine (none of the measured library did), and a stored value of just that bit — or
+/// the 0 left by unticking both boxes — must not empty the grid. The remaining bits keep their
+/// old positions so a stored selection still means what it meant.
+struct FRSource: OptionSet {
     let rawValue: Int
-    
-    
-    static let allOptions: [String] = [
-        "Ultrawide Standard",
-        "2560x1080",
-        "3440x1440",
-    ]
-    
-    static let ultrawideStandard    = FRUltraWidescreenResolution(rawValue: 1 << 0)
-    static let resolution2560x1080  = FRUltraWidescreenResolution(rawValue: 1 << 1)
-    static let resolution3440x1440  = FRUltraWidescreenResolution(rawValue: 1 << 2)
-    
-    static let all: FRUltraWidescreenResolution = [.ultrawideStandard, resolution2560x1080, .resolution3440x1440]
-    static let none: FRUltraWidescreenResolution = []
-}
 
-struct FRDualscreenResolution: FilterResultsModel {
-    let rawValue: Int
-    
-    static let allOptions: [String] = [
-        "Dual Standard",
-        "3840x1080",
-        "5120x1440",
-        "7680x2160"
-    ]
-    
-    static let dualStandard         = Self.init(rawValue: 1 << 0)
-    static let resolution3840x1080  = Self.init(rawValue: 1 << 1)
-    static let resolution5120x1440  = Self.init(rawValue: 1 << 2)
-    static let resolution7680x2160  = Self.init(rawValue: 1 << 3)
-    
-    static let all: Self = [.dualStandard, .resolution3840x1080, .resolution5120x1440, .resolution7680x2160]
-    static let none: Self = []
-}
-
-struct FRTriplescreenResolution: FilterResultsModel {
-    let rawValue: Int
-    
-    static let allOptions: [String] = [
-            "Triple Standard",
-            "4096x768",
-            "5760x1080",
-            "7680x1440",
-            "11520x2160"
-        ]
-    
-    static let tripleStandard        = FRTriplescreenResolution(rawValue: 1 << 0)
-    static let resolution4096x768    = FRTriplescreenResolution(rawValue: 1 << 1)
-    static let resolution5760x1080   = FRTriplescreenResolution(rawValue: 1 << 2)
-    static let resolution7680x1440   = FRTriplescreenResolution(rawValue: 1 << 3)
-    static let resolution11520x2160  = FRTriplescreenResolution(rawValue: 1 << 4)
-    
-    static let all: FRTriplescreenResolution = [.tripleStandard, resolution4096x768, resolution5760x1080, resolution7680x1440, resolution11520x2160]
-    static let none: FRTriplescreenResolution = []
-}
-
-struct FRPortraitScreenResolution: FilterResultsModel {
-    let rawValue: Int
-    
-    static let allOptions = [
-        "PotraitStandard",
-        "720x1280",
-        "1080x1920",
-        "1440x2560",
-        "2160x3840"
-    ]
-    
-    static let portraitStandard     = Self.init(rawValue: 1 << 0)
-    static let resolution720x1280   = Self.init(rawValue: 1 << 1)
-    static let resolution1080x1920  = Self.init(rawValue: 1 << 2)
-    static let resolution1440x2560  = Self.init(rawValue: 1 << 3)
-    static let resolution2160x3840  = Self.init(rawValue: 1 << 4)
-    
-    static let all: Self            = [.portraitStandard, .resolution720x1280, .resolution1080x1920, .resolution1440x2560, .resolution2160x3840]
-    static let none: Self           = []
-}
-
-struct FRMiscResolution: FilterResultsModel {
-    let rawValue: Int
-    
-    static let allOptions = [
-        "OtherResolution",
-        "DynamicResolution"
-    ]
-    
-    static let otherResolution     = Self.init(rawValue: 1 << 0)
-    static let dynamicResolution   = Self.init(rawValue: 1 << 1)
-    
-    static let all: Self           = [.otherResolution, .dynamicResolution]
-    static let none: Self          = []
-}
-
-struct FRSource: FilterResultsModel {
-    let rawValue: Int
-    
-    static let allOptions = [
-        "Official",
-        "Workshop",
-        "MyWallpapers"
-    ]
-    
-    static let official        = Self.init(rawValue: 1 << 0)
     static let workshop        = Self.init(rawValue: 1 << 1)
     static let myWallpapers    = Self.init(rawValue: 1 << 2)
-    
-    static let all: Self       = [.official, .workshop, .myWallpapers]
+
+    static let all: Self       = [.workshop, .myWallpapers]
     static let none: Self      = []
+
+    static let options: [(title: LocalizedStringKey, flag: FRSource)] = [
+        ("Workshop", .workshop),
+        ("My Wallpapers", .myWallpapers)
+    ]
+
+    /// Workshop when the manifest names a Workshop id, or the folder is named by one: steamcmd
+    /// downloads are imported as `<library>/<workshopid>` and their project.json usually carries
+    /// no `workshopid` (76 of the 136 in the measured library), and dragging in steamcmd's own
+    /// `workshop/content/431960` folder keeps the same names. Everything else — a bare video, a
+    /// zip, a folder of one's own — is the user's.
+    static func of(_ wallpaper: WEWallpaper) -> FRSource {
+        if wallpaper.project.workshopid != nil { return .workshop }
+        return isWorkshopFolderName(wallpaper.wallpaperDirectory.lastPathComponent) ? .workshop : .myWallpapers
+    }
+
+    /// Whether a library folder name reads as a Workshop id. "All digits" alone was not enough:
+    /// the bare-video import names its folder after the clip and writes a project.json with no
+    /// `workshopid`, so `1.mp4` or `20231015.mp4` landed in a numeric folder and was filed under
+    /// Workshop — unticking Workshop hid the video just imported. Steam's published-file ids had
+    /// passed nine digits years before Wallpaper Engine's Workshop opened (the smallest in the
+    /// measured library is 860914166), so anything shorter is the user's. A longer all-digit
+    /// clip name (a Unix timestamp) would still pass, which is why `WallpaperImporter` also
+    /// refuses to create a folder this test accepts.
+    static func isWorkshopFolderName(_ name: String) -> Bool {
+        name.count >= 9 && name.allSatisfy { $0.isASCII && $0.isNumber }
+    }
 }
 
+/// Workshop genres, matched against project.json's `tags` by `ContentViewModel.genres(of:)`.
+/// An empty selection means no restriction (see `filteredWallpapers`). The labels are shown as
+/// written and follow the Workshop's spelling: "Pixel Art" normalises to the same key as its
+/// "Pixel art" tag, and "Unspecified" is the Workshop's own tag (1 item in the measured
+/// library), which the old "UnspecifiedGenre" label never matched by name.
 struct FRTag: FilterResultsModel {
     let rawValue: Int
-    
+
     static let allOptions = [
         "Abstract",
         "Animal",
@@ -225,7 +157,7 @@ struct FRTag: FilterResultsModel {
         "MMD",
         "Music",
         "Nature",
-        "PixelArt",
+        "Pixel Art",
         "Relaxing",
         "Retro",
         "Sci-Fi",
@@ -233,7 +165,7 @@ struct FRTag: FilterResultsModel {
         "Technology",
         "Television",
         "Vehicle",
-        "UnspecifiedGenre"
+        "Unspecified"
     ]
     
     static let abstract             = FRTag(rawValue: 1 << 0)

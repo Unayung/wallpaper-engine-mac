@@ -33,16 +33,8 @@ struct ExplorerGlobalMenu: SubviewOfContentView {
                     }
                     .pickerStyle(.inline)
                 }
-                Section {
-                    Picker("Titles per page", selection: $viewModel.wallpapersPerPage) {
-                        Text("10 per page").tag(10)
-                        Text("25 per page").tag(25)
-                        Text("50 per page").tag(50)
-                        Text("1 per page (developer)").tag(1)
-                        Text("1 per page (developer)").tag(2)
-                    }
-                    .pickerStyle(.inline)
-                }
+                // "Titles per page" lived here; it drove the paging that never paged.
+                // See WallpaperExplorer.
             }
         }
         .labelStyle(.titleAndIcon)

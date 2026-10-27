@@ -20,6 +20,10 @@ To contributors: please add your name to the list when you submit a patch to the
 
 * **[1ris_W](https://github.com/Erica-Iris)**
    * Help with Chinese i18n translation
+* **[Gabriel Mendoza](https://github.com/gaboxdev)**
+   * Scene rendering: translated effect shaders, particles, text layers and their scripts,
+     keyframes and parallax, blend modes; playback policies, per-screen wallpapers, the
+     Settings window, library filters, and the Tools/ verification harnesses
 * **[Klaus Zhu](https://github.com/klauszhu1105)**
    * Designed the App's logo icons
 * **[mustpe](https://github.com/clspeter)**

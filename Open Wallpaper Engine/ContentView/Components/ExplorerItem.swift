@@ -19,13 +19,9 @@ struct ExplorerItem: SubviewOfContentView {
     
     var body: some View {
         ZStack(alignment: .bottom) {
-            GifImage(contentsOf: { (url: URL) in
-                if let selectedProject = try? JSONDecoder()
-                    .decode(WEProject.self, from: Data(contentsOf: url.appending(path: "project.json"))) {
-                    return url.appending(path: selectedProject.preview)
-                }
-                return Bundle.main.url(forResource: "WallpaperNotFound", withExtension: "mp4")!
-            }(wallpaper.wallpaperDirectory), animates: animates)
+            // The project was decoded when the library snapshot was taken; decoding
+            // project.json again here cost a file read per tile per render.
+            GifImage(contentsOf: wallpaper.previewURL, animates: animates)
             .resizable()
             .scaleEffect(viewModel.imageScaleIndex == index ? 1.2 : 1.0)
             .aspectRatio(1.0, contentMode: .fit)
